@@ -5,7 +5,7 @@
 Track an order/project from customer requirement to post-handover service,
 for **Business Links International (BLI)**, across two kinds of audiences:
 
-- **Internal team** — full visibility, with roles split by function (see §4).
+- **Internal team** — full visibility, with roles split by function (see §5).
   BLI has multiple people in the same role (several Project Coordinators,
   several Sales Managers, etc.) — each person has **one login**, and that
   login sees every order they're assigned to, whatever the role.
@@ -28,7 +28,7 @@ Every order moves through a fixed sequence of stages, followed by an
 open-ended post-handover service phase. **The Project Coordinator is the
 single point of data entry for all stages** — other internal roles advise,
 execute physically, or view, but the system-of-record update goes through
-the Coordinator (see §4 for exactly who does what).
+the Coordinator (see §5 for exactly who does what).
 
 | # | Stage | Executed by (real world) | Entered/updated in system by |
 |---|-------|---------------------------|-------------------------------|
@@ -62,7 +62,79 @@ Stage status: `not_started`, `in_progress`, `completed`, `delayed`, `blocked`.
 Stages are sequential by default but the model allows overlap — enforced by
 planning, not hard-coded in the database.
 
-## 3. Post-handover service module
+## 3. Stage-specific detail, targets & deadline alerts
+
+Every stage carries the common fields on `order_stages` (status,
+planned/actual start & end, notes — see §6). Three stages need more than
+that, plus every order needs deadline monitoring:
+
+### 3.1 Target dates — set manually per order
+
+Machine type and supplier lead times vary too much for a fixed template, so
+the **Project Coordinator sets `planned_start`/`planned_end` for every stage
+by hand** when planning the order (informed by the supplier's quote/lead
+time, shipping transit time, etc.). `orders.target_handover_date` is the
+overall commitment the whole plan is built back from.
+
+### 3.2 Manufacturing progress (stage 3) — milestone checklist
+
+Rather than one status field, manufacturing progress is a checklist the
+Project Coordinator builds per order (machines differ, so this isn't a
+fixed global template — typical items: design/drawing approval, fabrication,
+assembly, painting/finishing, packing & ready for FAT):
+
+```
+manufacturing_milestones (id, order_stage_id, name, sequence,
+                           planned_date, actual_date,
+                           status[pending|done], notes)
+```
+
+Stage 3's own status/dates on `order_stages` still exist (start = first
+milestone starts, end = last milestone done) so it fits the same deadline
+logic as every other stage, but the milestone list is what gives visibility
+into *where exactly* manufacturing stands.
+
+### 3.3 FAT & SAT (stages 5 and 10) — result + punch list + report
+
+FAT and SAT are structurally the same kind of event (a witnessed test with
+a pass/fail outcome and a list of issues to close out), so they share one
+table, disambiguated by `type`:
+
+```
+fat_sat_records   (id, order_stage_id, type[FAT|SAT], scheduled_date,
+                    actual_date, result[pass|fail|conditional_pass],
+                    report_document_id, notes)
+
+punch_list_items  (id, fat_sat_record_id, description, raised_by,
+                    status[open|resolved], resolved_at, resolved_by)
+```
+
+A stage isn't marked `completed` while it has open punch-list items with a
+`fail` or `conditional_pass` result — enforced in the API, not just the UI.
+`report_document_id` links to the uploaded FAT/SAT report in `documents`.
+For stage 10 (SAT), the customer's confirmation is recorded as a comment
+tied to this record — that's their sign-off action (§5, Customer row).
+
+### 3.4 Deadline & at-risk alerts — automatic, both directions
+
+A daily cron job (`check_stage_deadlines.php`) scans all `order_stages`
+where `status` is `not_started` or `in_progress` (never `completed` or
+manually `blocked`):
+
+- **Early warning** — if `planned_end` is within **3 days** (configurable)
+  and the stage hasn't started or isn't finished, create an "at risk"
+  notification. Doesn't change status.
+- **Auto-overdue** — the day `planned_end` passes with the stage still not
+  `completed`, the job sets `status = 'delayed'` and creates an overdue
+  notification.
+
+Both notification types go to the order's assigned **Project Coordinator**
+and to **every Company Owner**. The same check runs against
+`orders.target_handover_date` at the whole-order level, for the Company
+Owner portfolio dashboard. `amc_schedules.next_due_date` gets the same
+early-warning treatment (§4).
+
+## 4. Post-handover service module
 
 Since Installation & Service Engineers cover ongoing service, not just the
 installation event, the pipeline doesn't end at handover:
@@ -80,7 +152,7 @@ raising a ticket is a form of "comment," routed to a queue rather than a free
 text thread). Company Owners see open/overdue tickets across the whole
 portfolio.
 
-## 4. Roles & permissions
+## 5. Roles & permissions
 
 | Role | Assigned how | Scope |
 |------|--------------|-------|
@@ -101,7 +173,7 @@ actual scope — never by trusting an order ID passed from the client alone:
 - Supplier → `order.supplier_id` must equal the requesting user's `supplier_id`.
 - Customer → the order id must equal the requesting user's `scope_order_id`.
 
-## 5. Core data model
+## 6. Core data model
 
 ```
 suppliers         (id, name, contact_email, contact_phone)
@@ -128,6 +200,15 @@ stages            (id, name, sequence)                      -- master lookup
 order_stages      (id, order_id, stage_id, status,
                    planned_start, planned_end, actual_start, actual_end,
                    updated_by, notes)
+
+manufacturing_milestones (id, order_stage_id, name, sequence,
+                   planned_date, actual_date, status, notes)
+
+fat_sat_records   (id, order_stage_id, type, scheduled_date, actual_date,
+                   result, report_document_id, notes)
+
+punch_list_items  (id, fat_sat_record_id, description, raised_by,
+                   status, resolved_at, resolved_by)
 
 documents         (id, order_id, order_stage_id, type, file_path,
                    uploaded_by, visibility[internal|supplier|customer|shared])
@@ -163,7 +244,7 @@ projects too, add a `customers` table the same way (see ROADMAP).
 supplier-facing endpoint never returns a document tagged `internal`,
 regardless of what the client requests.
 
-## 6. AI integration layer
+## 7. AI integration layer
 
 A provider-agnostic service so the system can call **Claude, Gemini, or
 ChatGPT** interchangeably:
@@ -180,7 +261,9 @@ Use cases:
   (useful for Company Owners' portfolio view and Sales Manager customer updates).
 - **Risk advisory** — flag stages at risk (e.g., FAT readiness marked
   complete but shipment not yet booked) — surfaced to Project Coordinator and
-  Import Manager.
+  Import Manager. Complements, not replaces, the deterministic deadline
+  alerts in §3.4 — the cron job always fires on dates; the AI layer adds
+  judgment calls a date threshold can't (e.g., reading punch-list severity).
 - **Follow-up drafting** — draft a follow-up comment/message to a
   supplier/customer based on current stage status.
 - **Monitoring digest** — scheduled (cron) scan across active orders and open
@@ -196,7 +279,7 @@ Rules:
 - AI features are on-demand or scheduled batch, not triggered per page load
   (cost control).
 
-## 7. Tech stack
+## 8. Tech stack
 
 - **Backend**: PHP 8 + PDO/MySQL, REST API (JSON) — same pattern as the
   team's housekeeping-system project, for consistency and Bluehost shared
@@ -211,10 +294,10 @@ Rules:
   and the requester's scope — never as a direct static link.
 - **Email**: PHPMailer via Bluehost SMTP for milestone alerts and the AI
   monitoring digest.
-- **Scheduling**: Bluehost cPanel cron jobs (nightly digest, overdue checks,
-  AMC due-date reminders).
+- **Scheduling**: Bluehost cPanel cron jobs — `check_stage_deadlines.php`
+  (daily, §3.4), AI monitoring digest, AMC due-date reminders.
 
-## 8. Security notes
+## 9. Security notes
 
 - Force HTTPS (Bluehost's free SSL) — credentials and commercial
   (pricing/customs) data will transit this system.

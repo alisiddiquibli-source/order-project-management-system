@@ -7,14 +7,17 @@ begins.
   Auth for internal roles (Company Owner, Project Coordinator, Sales
   Manager, Import Manager, Installation & Service Engineer), orders +
   requirements + the 12-stage pipeline (entered/updated by the Project
-  Coordinator), document upload, Company Owner portfolio dashboard.
+  Coordinator) with manually-set target dates per stage, manufacturing
+  milestone checklist, FAT/SAT result + punch list records, document
+  upload, the daily deadline-check cron (auto-overdue + early warning,
+  §3.4), and the Company Owner portfolio dashboard.
 - [ ] **Phase 2 — External logins**
   One customer login per project (`scope_order_id`) and one supplier login
   per supplier company spanning all their projects (`supplier_id`) —
   observer + comment only.
 - [ ] **Phase 3 — Shipment & customs detail + notifications**
-  Shipment tracking fields, email alerts on milestone due/overdue, comment
-  notifications to relevant roles.
+  Shipment tracking fields, email delivery of the Phase 1 deadline alerts,
+  comment notifications to relevant roles.
 - [ ] **Phase 4 — Post-handover service module**
   Service tickets, AMC schedules, customer ticket-raising via their project
   login, Company Owner visibility into open/overdue tickets.
@@ -29,7 +32,7 @@ begins.
 
 Customer logins are still scoped to one project each (a repeat customer
 gets a fresh login per order) — suppliers already got the multi-project
-treatment (§5 `suppliers` table). If per-project customer logins become
+treatment (§6 `suppliers` table). If per-project customer logins become
 inconvenient in practice, the fix is a `customers` table mirroring
 `suppliers`, linking one login to all of that customer's orders — flagged
 here so it's not forgotten, not built until asked for.

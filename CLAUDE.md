@@ -49,6 +49,15 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
   default — don't add write access for other internal roles without
   confirming with the user first, it's a deliberate single-point-of-entry
   design.
+- Target/planned dates per stage are entered manually per order by the PC —
+  no lead-time template auto-fills them (rejected on purpose: lead times
+  vary too much by machine type).
+- A FAT/SAT stage (`fat_sat_records`) cannot be marked `completed` while it
+  has open `punch_list_items` with result `fail` or `conditional_pass` —
+  enforce this server-side, not just in the UI.
+- The daily deadline-check job is the source of truth for `delayed` status
+  and at-risk notifications (see `docs/ARCHITECTURE.md` §3.4) — don't
+  hand-roll a second overdue check elsewhere.
 - AI provider keys (Claude/Gemini/ChatGPT) live server-side only, never sent
   to the frontend.
 - Uploaded documents are served through an authenticated endpoint, never as
