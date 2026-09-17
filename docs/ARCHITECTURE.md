@@ -1,222 +1,256 @@
 # System Design
 
-> **v3 note:** this revision resolves the 15 gaps raised by an external
-> review (business rules, responsibilities, workflow gaps) plus two
-> clarifications from BLI: an **order is one machine**, and for stages
-> 9–12 the **Installation & Service Engineer submits findings, the Project
-> Coordinator records stage completion**. Where a gap needed a business
-> decision rather than an engineering default, the resolution BLI chose is
-> stated explicitly.
+> **v4 note:** resolves two independent external reviews of v3. Both
+> converged strongly on: SAT/handover need genuine customer acceptance
+> (a Sales Manager can't accept on the customer's behalf without evidence
+> of authorization), acceptance must be tied to a specific test/report
+> revision (a retest voids the old acceptance), completion needs to mean
+> *actually finished* not just *reported*, and several "mutable row with a
+> notes field" spots needed a proper history instead. Where the two
+> reviews disagreed only in emphasis, the stricter reading was taken —
+> this system exists to prevent exactly the disputes a looser rule would
+> allow.
 
 ## 1. Purpose
 
 Track a customer engagement from requirement to post-handover service, for
 **Business Links International (BLI)**, across two kinds of audiences:
 
-- **Internal team** — full visibility, with roles split by function (§7).
-  BLI has multiple people in the same role (several Project Coordinators,
-  several Sales Managers, etc.) — each person has **one login**, and that
-  login sees every project/order they're assigned to, whatever the role.
-- **External parties** — observer + commenter only, no data entry:
-  - **Customer** — one login *per project* (§2), seeing every machine/order
-    in that project.
+- **Internal team** — full visibility, roles split by function (§7).
+- **External parties** — **cannot edit operational/pipeline progress**, but
+  can comment, raise service tickets, and record authorized acceptances
+  (§3.4) — that's data too, just not pipeline data:
+  - **Customer** — one login *per project* (§2), seeing every order in it.
   - **Supplier** — one login *per supplier company*, scoped to **all**
-    projects/orders that company supplies to BLI, not just one.
+    orders that company supplies to BLI.
 
-Because external logins exist, **data isolation is a first-class
-requirement**: a customer must never see another customer's project, and a
-supplier must never see another supplier's pricing, schedule, or documents
-for an order it isn't part of.
+Data isolation is first-class: a customer never sees another customer's
+project; a supplier never sees another supplier's pricing, schedule, or
+documents; and on a multi-supplier project, one supplier never sees another
+supplier's machine within the *same* project either (§6).
 
 ## 2. Project vs. Order — a deal can have several machines
 
-**A Project is one customer engagement/deal. An Order is one machine.** A
-project can contain multiple orders (e.g., a customer buying three
-different machines in one deal = one project, three orders), and **each
-order runs its own 12-stage pipeline independently** — different
-manufacturing timelines, different FAT dates, different install dates —
-while rolling up under the same project for reporting.
+**A Project is one customer deal. An Order is exactly one physical
+machine** — not "up to N machines of a kind." If a customer orders three
+identical units, that's three orders, because each physical machine gets
+its own FAT, its own SAT, its own installation and acceptance — a shared
+"quantity" field would let three machines hide behind one test record.
+There is no `quantity` field on `orders` for this reason.
 
 ```
 projects (id, project_number, customer_name, customer_contact, title,
-          sales_manager_id,          -- owns the whole deal
-          project_coordinator_id,    -- default PC for the whole deal
-          status, created_by)
+          sales_manager_id, project_coordinator_id,   -- deal-level defaults
+          status[active|completed], created_by)
 
 orders   (id, project_id, order_number, machine_name, machine_spec,
-          quantity, supplier_id, contract_value, currency,
-          start_date, target_handover_date, status,
-          project_coordinator_id,    -- nullable override of the project's PC,
-                                      -- for when one machine needs a different PC
-          installation_engineer_id,  -- always set per order — install visits
-                                      -- are scheduled per machine, can differ
-                                      -- even within one project
-          created_by)
+          supplier_id, contract_value, currency,
+          start_date, target_handover_date, status[active|on_hold|cancelled|completed],
+          project_coordinator_id,    -- nullable override of the project's PC
+          installation_engineer_id,  -- always set per order
+          warranty_start_trigger[shipment|installation|sat|handover],
+          warranty_start_date, warranty_end_date, created_by)
+
+order_status_changes (id, order_id, old_status, new_status, reason,
+                       changed_by, changed_at)
 ```
 
-Assignment defaults: **Sales Manager and (usually) Project Coordinator are
-assigned once per project**; Installation & Service Engineer and Supplier
-are assigned **per order**, since those vary machine-to-machine even inside
-one deal. A specific order can override the project's default PC if that
-one machine needs a specialist.
+Sales Manager and (usually) PC are assigned once per **project**;
+Installation & Service Engineer and Supplier are assigned **per order**,
+since those vary machine-to-machine within one deal.
 
-**Customer login scope moves to the project**: `users.scope_project_id`
-(not `scope_order_id`) — one login sees every machine/order in their
-project, which is what a customer buying multiple machines in one deal
-actually wants.
+**Order lifecycle beyond the pipeline (new — reviews flagged this
+missing):** an order can go `on_hold` or `cancelled`, not just move through
+the 12 stages. Only a **Sales Manager or Company Owner** can set either —
+never the PC unilaterally — logged in `order_status_changes`. While
+`on_hold`, deadline/blocker alerts pause (no false escalation on a
+deliberately paused order) but nothing is deleted; reopening resumes
+monitoring from the current plan, replanning dates as normal via
+`commitment_changes` (§4.1).
 
-Everywhere below, "order" means one machine's pipeline; "project" means the
-containing deal.
+**Project completion**: a project reaches `status = completed` only when
+**every one of its orders** is `completed` (handover done) or `cancelled`.
+Post-handover service (§5) is tracked per order and keeps running
+independently of the project's completion status — a project can be
+"done" for delivery purposes while individual machines still have active
+warranty/AMC service.
+
+**Customer login is project-scoped** (`users.scope_project_id`) — one
+login sees every order in their project.
+
+Everywhere below, "order" = one machine's pipeline; "project" = the deal.
 
 ## 3. Workflow — the order (machine) pipeline
-
-Every order moves through a fixed sequence of stages, followed by an
-open-ended post-handover service phase.
 
 | # | Stage | Executed by (real world) | Recorded in system by |
 |---|-------|---------------------------|-------------------------------|
 | 1 | Requirements captured | Sales Manager + customer | Project Coordinator |
 | 2 | Order placed (PO issued) | Project Coordinator | Project Coordinator |
-| 3 | Machine manufacturing progress (supplier site) | Supplier | Project Coordinator |
+| 3 | Machine manufacturing progress | Supplier | Project Coordinator |
 | 4 | Machine testing material coordination | Project Coordinator / Supplier | Project Coordinator |
 | 5 | Machine FAT readiness / FAT execution | Supplier, witnessed remotely/on-site | Project Coordinator |
 | 6 | Shipment coordination | Project Coordinator | Project Coordinator |
-| 7 | Import clearance in Pakistan | **Customer's own import team** — BLI only coordinates | Project Coordinator |
-| 8 | Delivery to customer | **Customer's own import team** — BLI only coordinates | Project Coordinator |
-| 9 | Installation at customer site | **Installation & Service Engineer** — submits findings/report | Project Coordinator records stage completion from the Engineer's submission |
-| 10 | SAT (Site Acceptance Test) | **Installation & Service Engineer** executes with customer; **Engineer submits the result** | Project Coordinator records stage completion from the Engineer's submission |
-| 11 | Training | **Installation & Service Engineer** — submits attendance/training record | Project Coordinator records stage completion from the Engineer's submission |
-| 12 | Handover | Project Coordinator + customer | Project Coordinator |
-| — | **Post-handover service** (ongoing) | Installation & Service Engineer | Installation & Service Engineer, directly (no PC hand-off — see §5) |
+| 7 | Import clearance in Pakistan | **Customer's own import team** — BLI coordinates | Project Coordinator |
+| 8 | Delivery to customer | **Customer's own import team** — BLI coordinates | Project Coordinator |
+| 9 | Installation at customer site | **Engineer submits an installation report** | PC records completion from it |
+| 10 | SAT (Site Acceptance Test) | **Engineer executes with customer, submits the result** | PC records completion once a valid **customer** acceptance exists |
+| 11 | Training | **Engineer submits attendance/training record** | PC records completion from it |
+| 12 | Handover | **Engineer submits a handover-readiness report**; PC + customer complete it | PC records completion once a valid **customer** acceptance exists |
+| — | **Post-handover service** (ongoing) | Installation & Service Engineer, directly | Engineer, directly — no PC hand-off |
 
-**Resolving review point 1 (Coordinator vs. Engineer):** the Engineer never
-flips `order_stages.status` directly — that stays the Coordinator's job, so
-the master pipeline record still has one point of entry, as everywhere
-else. What changed is that the Engineer now has **direct write access to
-the stage-specific evidence tables** for stages 9–11 (installation report,
-`fat_sat_records` for SAT, the new `training_records` — §5), and the
-Coordinator's job for those three stages becomes *recording completion
-based on what the Engineer already submitted*, not re-typing it from
-scratch. Post-handover service tickets/AMC are the one place the Engineer
-has always managed data directly, since there's no "stage" pipeline record
-there to protect.
+The Engineer never flips `order_stages.status` — that stays the PC's job,
+preserving one point of entry on the master pipeline record. What the
+Engineer owns directly is the **evidence** for stages 9–12 (§4.3), via a
+single `engineer_reports` table for installation and handover-readiness,
+plus `fat_sat_records` for SAT and `training_records` for training. Stage
+12 previously had no Engineer submission in this design — that was a gap
+against BLI's own instruction ("stages 9–12 need Engineer update"), fixed
+here: the Engineer confirms the machine is technically ready to hand over
+before the PC and customer close it out.
 
-BLI does not track the supplier's own raw-material import/procurement —
-scope starts once the machine is in manufacturing. BLI also does not
-execute Pakistan customs clearance or final delivery (stages 7–8) — the
-**customer's own import team** does; BLI's Project Coordinator coordinates,
-and the **Import Manager joins as an advisor alongside the PC and Sales
-Manager only if the customer's import team asks for help** — not a
-standing responsibility on every order.
+BLI does not track the supplier's raw-material import — scope starts at
+manufacturing. BLI does not execute Pakistan customs clearance or delivery
+(stages 7–8) — the **customer's own import team** does; the PC coordinates,
+and the **Import Manager advises alongside the PC and Sales Manager only
+when asked** — not a standing duty on every order.
 
-### 3.1 Stage dependencies (resolves review point 4)
-
-Stages default to sequential, but some legitimately overlap. The rule is:
-an order_stage cannot be marked `completed` while a **hard prerequisite**
-stage is still open, unless an explicit exception is recorded.
+### 3.1 Stage dependencies and exceptions
 
 | Stage | Can start in parallel with | Hard prerequisite to *complete* |
 |---|---|---|
-| 3 Manufacturing | 4 (testing material coordination often runs alongside) | 2 (order placed) |
+| 3 Manufacturing | 4 | 2 (order placed) |
 | 4 Testing material coordination | 3 | 2 |
-| 5 FAT | may be scheduled while 3/4 are finishing | 3 substantially complete (PC's judgment — not hard-blocked) |
-| 6 Shipment coordination | may start (freight booking) while 5 is still in progress | **Dispatch (marking 6 `completed`) requires 5 `completed`, OR an approved exception** |
-| 7 Import clearance | — | 6 completed (goods must be shipped) |
+| 5 FAT | scheduled while 3/4 finish | starting FAT before 3 is fully `done` requires a **required PC note** justifying it — not silently allowed |
+| 6 Shipment coordination | freight booking may start while 5 is open | **completing 6 (marking goods actually dispatched) requires 5 `completed`, OR an approved exception** |
+| 7 Import clearance | — | 6 completed |
 | 8 Delivery | — | 7 completed |
-| 9 Installation | — | 8 completed (machine physically on site) |
+| 9 Installation | — | 8 completed |
 | 10 SAT | — | 9 completed |
-| 11 Training | may run in the same visit as 10 | none (soft — commonly concurrent with SAT) |
+| 11 Training | may run in the same visit as 10 | none (soft) |
 | 12 Handover | — | 10 completed AND 11 completed |
 
-Exceptions (e.g., shipping before FAT fully closes for a commercial
-reason) are recorded, not silently allowed:
+**Completing stage 6 means dispatch actually happened, not a booking.**
+`shipments` needs an `actual_dispatch_date` (not just carrier + ETD) before
+stage 6 can be marked `completed` — a freight booking alone only supports
+`in_progress`.
+
+Exceptions are recorded, never silent, and **narrowly scoped**:
 
 ```
 stage_exceptions (id, order_stage_id, prerequisite_stage_id,
+                   applies_to[open_minor_items|procedural_delay],
                    reason, approved_by, approved_at)
 ```
 
-Only a **Sales Manager or Company Owner** can approve a `stage_exceptions`
-row — a Project Coordinator can request one via comment, but can't
-self-approve skipping a hard prerequisite.
+An exception can **never** be used against a `fail` result or an open
+`critical` punch-list item — only against open `minor` items or a
+procedural (non-quality) delay. Only a **Sales Manager or Company Owner**
+approves one; a PC can request but not self-approve.
 
-### 3.2 Stage completion criteria (resolves review point 3)
+### 3.2 Stage completion criteria
 
 | Stage | "Completed" requires |
 |---|---|
 | 1 Requirements | `requirements.approved_by`/`approved_at` set |
-| 2 Order placed | PO document uploaded (`documents.type = PO`) |
-| 3 Manufacturing | every `manufacturing_milestones` row `status = done` |
-| 4 Testing material | PC-confirmed status + notes (no sub-table; low complexity) |
-| 5 FAT | `fat_sat_records` (type FAT) `result = pass`, or `conditional_pass` **with an `acceptances` record** (§3.4) — never just an empty punch list |
-| 6 Shipment | `shipments` row exists with carrier + ETD, and §3.1's dependency is satisfied |
-| 7 Import clearance | `customer_import_tracking.latest_status = cleared` (§8) |
-| 8 Delivery | delivery document uploaded or customer confirms receipt |
-| 9 Installation | Engineer's installation report/photos submitted |
-| 10 SAT | `fat_sat_records` (type SAT) `result = pass` or `conditional_pass` **with an `acceptances` record** |
-| 11 Training | `training_records` shows attendance **and** an `acceptances` (training_ack) record |
-| 12 Handover | handover certificate uploaded **and** an `acceptances` (handover_confirmation) record |
+| 2 Order placed | PO document uploaded |
+| 3 Manufacturing | a **non-empty** `manufacturing_milestones` checklist, every row `done` |
+| 4 Testing material | PC-confirmed status + notes |
+| 5 FAT | `result = pass`, or `conditional_pass` with a valid `acceptances` record tied to *this* `fat_sat_records` row (§3.3–3.4) |
+| 6 Shipment | `shipments.actual_dispatch_date` set, and §3.1's dependency satisfied |
+| 7 Import clearance | `customer_import_tracking` (stage 7 row) `latest_status = cleared` (§8) |
+| 8 Delivery | `customer_import_tracking` (stage 8 row) `latest_status = delivered`, or a delivery document |
+| 9 Installation | `engineer_reports` (type installation) `completion_status = complete`, no unresolved `outstanding_issues` |
+| 10 SAT | `result = pass` or `conditional_pass`, **plus a valid customer acceptance** (§3.4 — Sales Manager alone is not sufficient here) |
+| 11 Training | `training_records` attendance **and** a `training_ack` acceptance |
+| 12 Handover | `engineer_reports` (type handover_readiness) `complete`, handover certificate uploaded, **plus a valid customer acceptance** |
 
-### 3.3 FAT/SAT outcomes, severity, and retesting (resolves review point 5)
+### 3.3 FAT/SAT outcomes, severity, and retesting
 
-`punch_list_items` gets a `severity` field: `critical | minor`.
+`punch_list_items` gets `severity[critical|minor]`, plus follow-through
+fields: `assigned_to`, `target_resolution_date`, `verified_by`,
+`verified_at`, `carries_past_handover` (a minor item explicitly allowed to
+stay open after handover, tracked onward as a service concern).
 
-- **`fail`** result → stage cannot proceed at all. A retest is required:
-  create a new `fat_sat_records` row for the same `order_stage_id`, and
-  mark the prior one `superseded_by` the new row's id.
-- **`conditional_pass`** → only valid if **every open punch-list item is
-  `minor`**. A single open `critical` item forces `fail`, not
-  `conditional_pass` — there is no "pass with a critical issue open."
-- **A `conditional_pass` is not usable until it has an explicit
-  `acceptances` record** (§3.4) — closing every punch-list item is not
-  itself acceptance. This directly addresses the review's point: *"a
-  failed test should not become acceptable merely because its issue list
-  is empty."*
+- **`fail`** → cannot proceed. Retest = new `fat_sat_records` row for the
+  same `order_stage_id`; the prior row gets `superseded_by` set.
+- **`conditional_pass`** → valid only if every open item is `minor`. One
+  open `critical` item forces `fail`.
+- **A `conditional_pass` needs an `acceptances` record tied to that exact
+  `fat_sat_records.id`** — not just "the stage has an acceptance somewhere."
+  **If the record is later superseded by a retest, its acceptance no
+  longer counts** — the new record needs its own fresh acceptance. This
+  closes the gap where a stale acceptance could appear to cover a revised
+  report.
 
-### 3.4 Explicit acceptance vs. ordinary comments (resolves review point 6)
+### 3.4 Explicit acceptance vs. ordinary comments — and whose acceptance counts
 
-Acceptance is a deliberate, auditable action — not inferred from a
-friendly comment:
+Acceptance is a deliberate, auditable action, tied to the specific record
+it covers:
 
 ```
-acceptances (id, order_stage_id, type[fat_conditional|sat_result|training_ack|handover_confirmation],
-             accepted_by_type[customer|sales_manager], accepted_by_user_id,
+acceptances (id, order_stage_id,
+             target_record_type[fat_sat_record|training_record|engineer_report],
+             target_record_id,
+             type[fat_conditional|sat_result|training_ack|handover_confirmation],
+             accepted_by_type[customer|sales_manager],
+             accepted_by_user_id,
+             customer_authorization_evidence_document_id,  -- required if a
+                                                             -- Sales Manager
+                                                             -- accepts on
+                                                             -- the customer's
+                                                             -- behalf, below
+             constitutes_customer_acceptance,  -- boolean, see rule below
              conditions_notes, accepted_at)
 ```
 
-**Who may accept a FAT/SAT conditional pass: the Sales Manager or the
-customer, whichever confirms first** — both are authorized, recorded either
-way, since the customer isn't always actively engaged at the FAT stage
-(before the machine has even shipped) but is always available by SAT.
-Handover confirmation follows the same either/or rule. `acceptances` rows
-are append-only — never edited or deleted, only superseded by a new
-acceptance if something changes.
+**BLI's internal approval to proceed is not the same thing as the
+customer's acceptance.** Both reviews flagged this as the sharpest gap in
+v3, and the fix distinguishes two stages by risk:
+
+- **FAT conditional-pass** — a pre-shipment, BLI-internal commercial risk
+  call (the customer usually isn't engaged yet). Either the **Sales
+  Manager or the customer** may record it, and either one sets
+  `constitutes_customer_acceptance` appropriately — no extra evidence
+  needed, since it's not yet a customer-facing sign-off.
+- **SAT and Handover** — these happen at the customer's site, the customer
+  is present, and this is exactly the sign-off this system exists to make
+  unambiguous. **`constitutes_customer_acceptance` must be true before the
+  stage can complete.** That's satisfied by:
+  - the customer's own login recording the acceptance directly, or
+  - a Sales Manager recording it **with `customer_authorization_evidence_document_id`
+    set** — a reference to something showing the customer actually agreed
+    (an email, a signed note) — not a bare internal say-so.
+  A Sales Manager acceptance *without* that evidence is stored (so the
+  decision to proceed isn't lost) but **does not satisfy stage
+  completion** — it only records that BLI chose to proceed at its own
+  risk, and it auto-notifies the Company Owner, since that's a real
+  liability call, not a routine one.
+
+`acceptances` rows are append-only.
 
 ## 4. Stage-specific detail & deadline alerts
 
-### 4.1 Target dates — set manually, with a change history (resolves review point 8)
-
-Machine type and supplier lead times vary too much for a fixed template, so
-the **Project Coordinator sets `planned_start`/`planned_end` for every
-stage by hand**. Once set, the *original* commitment is preserved
-separately from the *current* plan:
+### 4.1 Target dates, change history, and who may approve a change
 
 ```
 order_stages (id, order_id, stage_id, status,
-              original_planned_start, original_planned_end,  -- set once, immutable
-              planned_start, planned_end,                     -- current agreed plan, mutable
+              original_planned_start, original_planned_end,  -- immutable
+              planned_start, planned_end,                     -- current, mutable
               actual_start, actual_end, updated_by, notes)
 
-commitment_changes (id, order_id, order_stage_id,   -- one of these two set
-                     field_name, old_value, new_value,
-                     reason, changed_by, customer_informed, changed_at)
+commitment_changes (id, order_id, order_stage_id, field_name,
+                     old_value, new_value, reason, changed_by,
+                     approved_by,          -- see rule below
+                     customer_informed, changed_at)
 ```
 
-Any change to a `planned_end` (stage-level) or `target_handover_date`
-(order-level) writes a `commitment_changes` row — reason, who authorized
-it, and whether the customer was told. This is what lets the Sales Manager
-or Owner later see "we originally committed to X, we're now planning for
-Y, and here's why."
+The PC sets dates by hand (lead times vary too much for a template) and can
+freely log **internal replanning** (buffer adjustments never communicated
+to the customer) with just `changed_by`. But **any change to
+`target_handover_date`, or to a stage date that's already been communicated
+to the customer (`customer_informed` was true on its original entry),
+requires `approved_by` to be a Sales Manager or Company Owner** — a PC
+can't silently push out a commitment the customer already has in writing.
 
 ### 4.2 Manufacturing progress (stage 3) — milestone checklist
 
@@ -226,60 +260,77 @@ manufacturing_milestones (id, order_stage_id, name, sequence,
                            status[pending|done], notes)
 ```
 
-Per-order checklist (machines differ, so this isn't a fixed global
-template) — typical items: design/drawing approval, fabrication, assembly,
-painting/finishing, packing & ready for FAT.
+Per-order checklist; **stage 3 cannot move to `in_progress` with zero
+milestone rows** — an empty checklist isn't a valid plan.
 
-### 4.3 FAT, SAT & training records
+### 4.3 Engineer-submitted evidence: installation, SAT, training, handover
 
 ```
+engineer_reports  (id, order_stage_id, type[installation|handover_readiness],
+                    completed_by, completion_status[complete|incomplete],
+                    outstanding_issues, report_document_id, notes, submitted_at)
+
 fat_sat_records   (id, order_stage_id, type[FAT|SAT], scheduled_date,
                     actual_date, result[pass|fail|conditional_pass],
                     superseded_by, report_document_id, notes)
 
 punch_list_items  (id, fat_sat_record_id, description, severity[critical|minor],
-                    raised_by, status[open|resolved], resolved_at, resolved_by)
+                    assigned_to, target_resolution_date,
+                    raised_by, status[open|resolved],
+                    resolved_at, resolved_by, verified_by, verified_at,
+                    carries_past_handover)
 
 training_records  (id, order_stage_id, scheduled_date, actual_date,
                     attendees, materials_provided, report_document_id, notes)
 ```
 
-`report_document_id` links to the uploaded report in `documents`.
+**Completion must mean actually finished, not just reported**:
+`engineer_reports.completion_status` requires an explicit
+`complete`/`incomplete` call from the Engineer, with `outstanding_issues`
+describing anything not done — a report full of photos isn't itself proof
+of completion if the Engineer hasn't affirmatively said so.
 
-### 4.4 Deadline & at-risk alerts — automatic, both directions
+### 4.4 Deadline & at-risk alerts — continuous, not one-shot
 
-A daily cron job (`check_stage_deadlines.php`) scans all `order_stages`
-where `status` is `not_started` or `in_progress`:
+A daily cron (`check_stage_deadlines.php`) evaluates **every non-completed
+`order_stage`** (including ones already `delayed` or `blocked` — earlier
+drafts wrongly stopped monitoring those once flagged):
 
-- **Early warning** — `planned_end` within **3 days** (configurable) and
-  not finished → "at risk" notification, no status change.
-- **Auto-overdue** — `planned_end` passed and not `completed` → status
-  becomes `delayed`, overdue notification fires.
+- **Early warning** — `planned_end` within **3 days** (configurable by
+  Company Owner, §7.1) and not finished → "at risk" notification.
+- **Overdue** — `planned_end` passed and not `completed` → status
+  `delayed`, and the notification **repeats daily with the current
+  days-overdue count**, not just once on the initial transition.
 
-Recipients: the order's **Project Coordinator**, its **Sales Manager**, and
-**every Company Owner**. Same check runs against `target_handover_date` at
-the order level.
+Recipients: the order's PC, its Sales Manager, and every Company Owner.
+Same logic runs against `target_handover_date`.
 
-### 4.5 Blocked work is monitored harder, not excluded (resolves review point 9)
+### 4.5 Blocked work — monitored on two tracks, both kept visible
 
-A `blocked` stage is **not** exempt from monitoring — it's the opposite:
-it needs the most attention. Marking a stage `blocked` requires logging why:
+A `blocked` stage stays in the deadline scan above (its delay keeps
+accruing) **and** gets its own blocker record:
 
 ```
-blockers (id, order_stage_id, description, responsible_party,
+blockers (id, order_stage_id, description,
+          responsible_party[bli_internal|supplier|customer|third_party],
+          responsible_party_detail,
           next_action, next_review_date, raised_at, raised_by,
           resolved_at, resolved_by)
 ```
 
-`description`, `responsible_party`, and `next_action`/`next_review_date`
-are **required fields** when a stage is set to `blocked` — not optional
-metadata. The daily cron also scans open `blockers`: if `next_review_date`
-passes without an update, or the blocker has been open **7 days** without
-resolution, it escalates — a notification to the order's **Sales Manager
-and every Company Owner** (beyond the PC, who already knows), specifically
-flagged as needing intervention rather than routine tracking.
+`description`, `responsible_party`, `next_action`, `next_review_date` are
+required when a stage goes `blocked`. The UI shows both the overdue count
+*and* the blocker together — a blocked stage is never quietly hidden behind
+a different status. Escalates to Sales Manager + Company Owner if
+`next_review_date` passes unactioned, or the blocker's been open **7
+days**.
 
-## 5. Post-handover service module (resolves review point 12)
+`responsible_party` is a constrained enum specifically so portfolio
+advisory (§10) can attribute delay fairly — it is never inferred from who
+typed the entry (`raised_by`/`changed_by` just record authorship, not
+fault).
+
+## 5. Post-handover service module
 
 ```
 amc_contracts    (id, order_id, start_date, end_date, frequency,
@@ -289,94 +340,97 @@ amc_visits       (id, amc_contract_id, scheduled_date, actual_date,
                    assigned_engineer_id, notes)
 
 service_tickets  (id, order_id, type[warranty_claim|amc_visit|complaint|other],
-                   severity, response_target_hours,
+                   severity, response_target_hours, resolution_target_hours,
                    opened_by, assigned_engineer_id,
                    status[open|in_progress|resolved|closed],
+                   closure_type[customer_confirmed|auto_closed_no_response],
                    description, resolution_notes,
-                   opened_at, resolved_at, resolved_by,
-                   closed_at, closed_by)
+                   opened_at, first_response_at,
+                   resolved_at, resolved_by, closed_at, closed_by)
 ```
 
-`orders` gains `warranty_start_date`/`warranty_end_date`, set at handover.
-**`resolved` vs. `closed` are distinct**: `resolved` means the Engineer
-applied a fix; `closed` means the customer (or PC on the customer's behalf,
-if unresponsive after a defined period) confirmed satisfaction — a ticket
-can sit `resolved` without being `closed` if nobody's confirmed it yet.
-`response_target_hours` is the SLA commitment by ticket severity, used the
-same way as stage deadlines (§4.4) to flag an unanswered ticket as at-risk.
+**Warranty dates follow the contract, not a fixed rule**:
+`orders.warranty_start_trigger` (set at planning from the agreed terms)
+picks which stage's `actual_end` computes `warranty_start_date` —
+shipment, installation, SAT, or handover — rather than always assuming
+handover.
+
+**Service timing is defined, not vague:**
+- `first_response_at` marks when someone actually responded (distinct from
+  `resolved_at`); `response_target_hours` and `resolution_target_hours`
+  are tracked separately.
+- SLA clocks run in **business hours** (Mon–Sat, 9am–6pm PKT by default,
+  configurable by the Company Owner, §7.1), not calendar hours — checked
+  by a separate **hourly** cron (`check_ticket_sla.php`), since a daily
+  scan can't catch an hour-level SLA breach in time.
+- **`resolved` ≠ `closed`.** `resolved` = the Engineer applied a fix.
+  `closed` requires a `closure_type`: `customer_confirmed` (the customer
+  said so) or `auto_closed_no_response` (an automatic close after **5
+  business days** of silence following `resolved` — recorded explicitly as
+  unconfirmed, never presented as if the customer agreed).
 
 Customers raise tickets via their project login (comment mechanism, routed
-to a queue). Company Owners see open/overdue tickets and AMC visits due
-across the whole portfolio. Installation & Service Engineers manage all of
-this **directly** — no Project Coordinator hand-off, since there's no
-"pipeline stage" to protect a single point of entry for here.
+to a queue). Company Owners see open/overdue tickets and AMC visits due,
+portfolio-wide. Engineers manage all of this directly — no PC hand-off.
 
-## 6. Comment channels — internal, customer, supplier (resolves review point 7)
-
-`comments` gains an explicit `channel`, so internal discussion is never
-accidentally exposed:
+## 6. Comment & document scoping — internal, customer, per-supplier
 
 ```
-comments (id, project_id, order_id, order_stage_id, channel[internal|customer|supplier],
-          user_id, message, created_at)
+comments  (id, project_id, order_id, order_stage_id,
+           channel[internal|customer|supplier],
+           shared_with_supplier_id,  -- required when project_id is set,
+                                       -- order_id is null, and channel=supplier
+           user_id, message, created_at)
+
+documents (id, project_id, order_id, order_stage_id, type, file_path,
+           uploaded_by, visibility[internal|supplier|customer|shared],
+           shared_with_supplier_id)  -- same rule as comments, above
 ```
 
-- **`internal`** (default for internal-staff comments) — visible to
-  internal roles with access to that order only. Never shown to a customer
-  or supplier login.
-- **`customer`** — visible to internal roles + that order's/project's
-  customer login. A customer never sees the `supplier` channel.
-- **`supplier`** — visible to internal roles + that order's supplier
-  login. A supplier never sees the `customer` channel.
+Order-level items are already isolated (an order has exactly one
+`supplier_id`). The gap was **project-level** shared items on a
+multi-supplier project — a document attached to the whole deal, marked
+"visible to supplier," could otherwise leak one supplier's information to
+another supplier on the same project. `shared_with_supplier_id` closes
+that: a project-level supplier-visible item must name the one supplier
+company it's shared with. A customer never sees the `supplier` channel or
+vice versa.
 
-Internal staff can read and post on all three channels for orders they
-have access to; a customer login can only see/post on `customer`; a
-supplier login can only see/post on `supplier`. This is the same kind of
-scoping as `documents.visibility`, applied to discussion instead of files.
+**Supplier visibility is enforced by field, not just by "not commercial
+terms":** a supplier-facing read never includes `orders.contract_value`,
+`orders.currency`, `customer_name`/`customer_contact`, or any document/
+comment tagged for `internal` or `customer` only.
 
 ## 7. Roles & permissions
 
 | Role | Assigned how | Scope |
 |------|--------------|-------|
-| **Company Owner** | One login per person; role-based | **Full visibility across the entire portfolio** — every project/order, stage/milestone/FAT-SAT/shipment/document/service ticket, who's assigned where, every deadline/at-risk alert and AI advisory at portfolio scope. Also holds **account administration** (§7.1). No project data entry. |
-| **Sales Manager** | One login per person; `projects.sales_manager_id` | **Primary accountable custodian of the project.** Full read visibility into everything on every order in their assigned project(s) — every stage, milestone, FAT/SAT/training record, shipment, document, service ticket — plus comment/direct-instruction rights to the PC, and acceptance authority (§3.4). Doesn't enter stage data directly. |
-| **Project Coordinator** | One login per person; `projects.project_coordinator_id`, overridable per order | Full read/write on every order they're assigned to: creates the project/order, records all 12 stages (from their own work or the Engineer's submissions) + documents + shipments. Accountable to that project's Sales Manager. |
-| **Import Manager** | One login per person; global advisory role | Read access to all orders; comments on stages 6–8 jointly with the PC and Sales Manager, only when the customer's import team needs input. No stage-status edit rights. |
-| **Installation & Service Engineer** | One login per person; `orders.installation_engineer_id` | Full read/write on stages 9–11's **evidence tables** (installation report, `fat_sat_records`/SAT, `training_records`) for their assigned orders; the PC still records the stage `completed` status from that evidence (§3). Directly manages `service_tickets`/`amc_contracts`/`amc_visits` post-handover with no PC hand-off. Accountable to that order's Sales Manager. |
-| **Supplier** (external) | One login per supplier company | Observer + comment (`supplier` channel only) across every order linked to that supplier (`orders.supplier_id`). Sees stages 3–6 detail on those orders, not commercial terms with the customer. |
-| **Customer** (external) | One login per project | Observer + comment (`customer` channel only) on every order in their project (`scope_project_id`). Can raise a service ticket post-handover, and has acceptance authority on FAT-conditional/SAT/training/handover (§3.4). |
+| **Company Owner** | One login per person; role-based | Full visibility across the whole portfolio; who's assigned where; every alert and AI advisory at portfolio scope; account administration (§7.1); system settings (SLA windows, escalation thresholds). No project data entry. |
+| **Sales Manager** | One login per person; `projects.sales_manager_id` | Primary accountable custodian of the project. Full read visibility on every order in it; directs the PC; acceptance authority (§3.4), with the SAT/handover evidence requirement above; approves `stage_exceptions`, order hold/cancel, and customer-facing date changes. |
+| **Project Coordinator** | One login per person; `projects.project_coordinator_id`, overridable per order | Sole writer of `order_stages.status`. Records completion from Engineer evidence for 9–12. Logs internal (non-customer-facing) date replanning directly; customer-facing changes need Sales Manager/Owner approval. |
+| **Import Manager** | One login per person; global advisory | Read access to all orders; comments on stages 6–8 jointly with PC/Sales Manager only when asked. No edit rights anywhere. |
+| **Installation & Service Engineer** | One login per person; `orders.installation_engineer_id` | Direct read/write on the stage 9–12 evidence tables (`engineer_reports`, `fat_sat_records`/SAT, `training_records`) for assigned orders — not `order_stages.status` itself. Manages `service_tickets`/`amc_contracts`/`amc_visits` directly post-handover. |
+| **Supplier** (external) | One login per supplier company | Comment (`supplier` channel) + view on stages 3–6 across every order linked to that supplier. No commercial fields (§6). |
+| **Customer** (external) | One login per project | Comment (`customer` channel) across every order in their project. Acceptance authority on FAT-conditional/SAT/training/handover — **the only party whose acceptance always satisfies SAT/handover completion without extra evidence** (§3.4). Can raise service tickets. |
 
-**Accountability model:** per project, the **Sales Manager is the
-responsible owner of the outcome** — the Project Coordinator, Import
-Manager (when advising), and Installation & Service Engineer are all
-effectively reporting to that project's Sales Manager. The **Company Owner
-sits above all of it**, with the same treatment applied portfolio-wide.
-This is an accountability/visibility relationship, not a data-entry one —
-it changes who the system proactively surfaces information and AI
-recommendations to, not who's allowed to write what.
-
-Every API request is authorized server-side against the requester's actual
-scope — never a client-supplied id alone:
+Authorization, server-side, never from a client-supplied id:
 - Company Owner / Import Manager → role check only.
 - Sales Manager → `order.project.sales_manager_id` = requester.
 - Project Coordinator → `order.project_coordinator_id` = requester, or
-  (`order.project_coordinator_id IS NULL` and `order.project.project_coordinator_id` = requester).
-- Installation & Service Engineer → `order.installation_engineer_id` = requester.
+  falls back to `order.project.project_coordinator_id`.
+- Engineer → `order.installation_engineer_id` = requester.
 - Supplier → `order.supplier_id` = requester's `supplier_id`.
 - Customer → `order.project_id` = requester's `scope_project_id`.
 
-### 7.1 Account administration (resolves review point 13)
+### 7.1 Account administration & system settings
 
-**Company Owner holds account administration** — creating/deactivating
-logins, resetting passwords, assigning roles and project/order assignments.
-This is a distinct capability from project data entry (it's account
-management, not editing a stage), so it doesn't conflict with "Owner has no
-data entry" — that rule is about project records, not user accounts.
+Company Owner handles account administration (create/deactivate logins,
+reset passwords, role/project assignments — separate from project data
+entry) **and** the configurable thresholds referenced throughout this doc:
+the 3-day early-warning window, the 7-day blocker escalation, SLA business
+hours, and the 5-business-day auto-close window.
 
-### 7.2 Staff absence & reassignment (resolves review point 10)
-
-Reassigning `sales_manager_id` / `project_coordinator_id` /
-`installation_engineer_id` is never a silent overwrite:
+### 7.2 Staff absence & reassignment
 
 ```
 assignment_history (id, project_id, order_id, role,
@@ -385,141 +439,159 @@ assignment_history (id, project_id, order_id, role,
                      cover_end_date, changed_by, changed_at)
 ```
 
-Temporary cover sets a `cover_end_date`; past that date the system prompts
-whoever's watching (Sales Manager/Owner) to confirm a revert or make it
-permanent. Open blockers, comments, and history stay attached to the
-project/order, not the person, so accountability isn't lost when the
-assignee changes — only who's currently responsible changes.
+Never a silent overwrite. Temporary cover sets `cover_end_date`; past that
+date the system prompts for revert-or-confirm. Blockers, comments, and
+history stay attached to the project/order, not the person.
 
-## 8. Import & delivery coordination detail (resolves review point 11)
-
-Since stages 7–8 are executed by the customer's own import team, BLI needs
-a record of what's actually happening on their side, not just a status
-label:
+## 8. Import & delivery coordination detail
 
 ```
-customer_import_tracking (id, order_id, customer_contact_name,
-                           customer_contact_email, customer_contact_phone,
-                           latest_status, outstanding_documents,
-                           expected_date, next_follow_up_date,
+customer_import_tracking (id, order_stage_id,  -- one row for stage 7,
+                                                 -- one for stage 8 — not
+                                                 -- shared, since each has
+                                                 -- its own document chase
+                           customer_contact_name, customer_contact_email,
+                           customer_contact_phone, latest_status,
+                           outstanding_documents, expected_date,
+                           next_follow_up_date,
                            import_manager_engaged_at,
                            import_manager_disengaged_at, notes)
+
+customer_import_tracking_updates (id, customer_import_tracking_id,
+                                   status, note, reported_at, recorded_by)
 ```
 
-One row per order, covering both stage 7 and 8 (same customer team handles
-both). `import_manager_engaged_at`/`disengaged_at` record exactly when the
-Import Manager's advisory involvement started and ended, per §3 — so it's
-never ambiguous whether they're still "on" an order.
+Splitting per stage (not one row for both 7 and 8) avoids collapsing two
+independent document chases into one lossy `notes` field, and the
+`_updates` child table preserves history instead of overwriting
+`latest_status` in place each time. `import_manager_engaged_at`/
+`disengaged_at` record exactly when the Import Manager's advisory
+involvement started and ended.
 
 ## 9. Core data model (consolidated)
 
 ```
-projects          (id, project_number, customer_name, customer_contact, title,
-                   sales_manager_id, project_coordinator_id, status, created_by)
+projects           (id, project_number, customer_name, customer_contact, title,
+                    sales_manager_id, project_coordinator_id, status, created_by)
 
-suppliers         (id, name, contact_email, contact_phone)
+suppliers          (id, name, contact_email, contact_phone)
 
-users             (id, name, email, password_hash, role, status,
-                   scope_project_id,  -- set only for customer logins
-                   supplier_id)       -- set only for supplier logins
+users              (id, name, email, password_hash, role, status,
+                    scope_project_id, supplier_id)
 
-orders            (id, project_id, order_number, machine_name, machine_spec,
-                   quantity, supplier_id, contract_value, currency,
-                   start_date, target_handover_date, status,
-                   project_coordinator_id, installation_engineer_id,
-                   warranty_start_date, warranty_end_date, created_by)
+orders             (id, project_id, order_number, machine_name, machine_spec,
+                    supplier_id, contract_value, currency, start_date,
+                    target_handover_date, status, project_coordinator_id,
+                    installation_engineer_id, warranty_start_trigger,
+                    warranty_start_date, warranty_end_date, created_by)
 
-requirements      (id, order_id, description, document_ref, version,
-                   approved_by, approved_at)
+order_status_changes (id, order_id, old_status, new_status, reason,
+                    changed_by, changed_at)
 
-stages            (id, name, sequence)
+requirements       (id, order_id, description, document_ref, version,
+                    approved_by, approved_at)
 
-order_stages      (id, order_id, stage_id, status,
-                   original_planned_start, original_planned_end,
-                   planned_start, planned_end, actual_start, actual_end,
-                   updated_by, notes)
+stages             (id, name, sequence)
 
-commitment_changes (id, order_id, order_stage_id, field_name,
-                    old_value, new_value, reason, changed_by,
+order_stages       (id, order_id, stage_id, status,
+                    original_planned_start, original_planned_end,
+                    planned_start, planned_end, actual_start, actual_end,
+                    updated_by, notes)
+
+commitment_changes (id, order_id, order_stage_id, field_name, old_value,
+                    new_value, reason, changed_by, approved_by,
                     customer_informed, changed_at)
 
-stage_exceptions  (id, order_stage_id, prerequisite_stage_id,
-                   reason, approved_by, approved_at)
+stage_exceptions   (id, order_stage_id, prerequisite_stage_id, applies_to,
+                    reason, approved_by, approved_at)
 
 manufacturing_milestones (id, order_stage_id, name, sequence,
-                   planned_date, actual_date, status, notes)
+                    planned_date, actual_date, status, notes)
 
-fat_sat_records   (id, order_stage_id, type, scheduled_date, actual_date,
-                   result, superseded_by, report_document_id, notes)
+engineer_reports   (id, order_stage_id, type, completed_by,
+                    completion_status, outstanding_issues,
+                    report_document_id, notes, submitted_at)
 
-punch_list_items  (id, fat_sat_record_id, description, severity,
-                   raised_by, status, resolved_at, resolved_by)
+fat_sat_records    (id, order_stage_id, type, scheduled_date, actual_date,
+                    result, superseded_by, report_document_id, notes)
 
-training_records  (id, order_stage_id, scheduled_date, actual_date,
-                   attendees, materials_provided, report_document_id, notes)
+punch_list_items   (id, fat_sat_record_id, description, severity,
+                    assigned_to, target_resolution_date, raised_by,
+                    status, resolved_at, resolved_by, verified_by,
+                    verified_at, carries_past_handover)
 
-acceptances       (id, order_stage_id, type, accepted_by_type,
-                   accepted_by_user_id, conditions_notes, accepted_at)
+training_records   (id, order_stage_id, scheduled_date, actual_date,
+                    attendees, materials_provided, report_document_id, notes)
 
-blockers          (id, order_stage_id, description, responsible_party,
-                   next_action, next_review_date, raised_at, raised_by,
-                   resolved_at, resolved_by)
+acceptances        (id, order_stage_id, target_record_type, target_record_id,
+                    type, accepted_by_type, accepted_by_user_id,
+                    customer_authorization_evidence_document_id,
+                    constitutes_customer_acceptance, conditions_notes,
+                    accepted_at)
 
-documents         (id, project_id, order_id, order_stage_id, type, file_path,
-                   uploaded_by, visibility[internal|supplier|customer|shared])
+blockers           (id, order_stage_id, description, responsible_party,
+                    responsible_party_detail, next_action, next_review_date,
+                    raised_at, raised_by, resolved_at, resolved_by)
 
-shipments         (id, order_id, carrier, mode[sea|air|road],
-                   port_of_loading, port_of_discharge, bl_awb_number,
-                   etd, eta, customs_status, notes)
+documents          (id, project_id, order_id, order_stage_id, type,
+                    file_path, uploaded_by, visibility,
+                    shared_with_supplier_id)
 
-customer_import_tracking (id, order_id, customer_contact_name,
-                   customer_contact_email, customer_contact_phone,
-                   latest_status, outstanding_documents, expected_date,
-                   next_follow_up_date, import_manager_engaged_at,
-                   import_manager_disengaged_at, notes)
+shipments          (id, order_id, carrier, mode, port_of_loading,
+                    port_of_discharge, bl_awb_number, etd, eta,
+                    actual_dispatch_date, customs_status, notes)
 
-comments          (id, project_id, order_id, order_stage_id, channel,
-                   user_id, message, created_at)
+customer_import_tracking (id, order_stage_id, customer_contact_name,
+                    customer_contact_email, customer_contact_phone,
+                    latest_status, outstanding_documents, expected_date,
+                    next_follow_up_date, import_manager_engaged_at,
+                    import_manager_disengaged_at, notes)
 
-amc_contracts     (id, order_id, start_date, end_date, frequency,
-                   coverage_terms, notes)
+customer_import_tracking_updates (id, customer_import_tracking_id,
+                    status, note, reported_at, recorded_by)
 
-amc_visits        (id, amc_contract_id, scheduled_date, actual_date,
-                   assigned_engineer_id, notes)
+comments           (id, project_id, order_id, order_stage_id, channel,
+                    shared_with_supplier_id, user_id, message, created_at)
 
-service_tickets   (id, order_id, type, severity, response_target_hours,
-                   opened_by, assigned_engineer_id, status, description,
-                   resolution_notes, opened_at, resolved_at, resolved_by,
-                   closed_at, closed_by)
+amc_contracts      (id, order_id, start_date, end_date, frequency,
+                    coverage_terms, notes)
+
+amc_visits         (id, amc_contract_id, scheduled_date, actual_date,
+                    assigned_engineer_id, notes)
+
+service_tickets    (id, order_id, type, severity, response_target_hours,
+                    resolution_target_hours, opened_by, assigned_engineer_id,
+                    status, closure_type, description, resolution_notes,
+                    opened_at, first_response_at, resolved_at, resolved_by,
+                    closed_at, closed_by)
 
 assignment_history (id, project_id, order_id, role, previous_user_id,
-                   new_user_id, reason, cover_end_date, changed_by, changed_at)
+                    new_user_id, reason, cover_end_date, changed_by, changed_at)
 
-notifications     (id, user_id, order_id, type, message, read_at, created_at)
+activity_log       (id, order_id, entity_type, entity_id, action,
+                    old_value, new_value, user_id, created_at)
+                    -- generic audit trail for lower-stakes mutable writes
+                    -- (order_stages status transitions, milestone edits);
+                    -- commitment_changes and assignment_history exist
+                    -- separately because they need extra fields
+                    -- (reason, approver) this generic log doesn't carry
 
-ai_reports        (id, order_id, type, provider, prompt, response,
-                   status[new|acknowledged|dismissed|actioned],
-                   acknowledged_by, acknowledged_at, action_notes,
-                   created_by, created_at)
+notifications      (id, user_id, order_id, type, message, read_at, created_at)
+
+ai_reports         (id, order_id, type, provider, prompt, response,
+                    status[new|acknowledged|dismissed|actioned],
+                    acknowledged_by, acknowledged_at, action_notes,
+                    created_by, created_at)
 ```
 
-`documents.visibility` and `comments.channel` are enforced on every read —
-an external-facing endpoint never returns internal-only content regardless
-of what the client requests. `order_line_items` from the earlier draft is
-gone — since an order is one machine, its spec lives directly on `orders`
-(`machine_name`, `machine_spec`, `quantity`).
+`documents.visibility`/`shared_with_supplier_id` and `comments.channel`/
+`shared_with_supplier_id` are enforced on every read, never trusting the
+client.
 
-**Deferred, not built (resolves review point 14):** BLI confirmed no
-payment/value tracking is needed at this stage. `orders.contract_value`/
-`currency` remain as static reference fields only — not actively monitored,
-reported on, or tied to any milestone logic. No invoicing, payments, or
-outstanding-balance tracking is in scope; that stays in BLI's existing
-accounting tools.
+**Deferred, not built:** BLI confirmed no payment/value tracking is needed.
+`contract_value`/`currency` stay as static reference fields only.
 
 ## 10. AI integration layer
-
-A provider-agnostic service so the system can call **Claude, Gemini, or
-ChatGPT** interchangeably:
 
 ```
 AiAdvisorService
@@ -528,64 +600,52 @@ AiAdvisorService
 └── ChatGptAdapter
 ```
 
-Use cases:
-- **Status reports** — narrative summary on demand. Primary destination is
-  the **Sales Manager's dashboard** (per project) and the **Company
-  Owner's** portfolio roll-up.
-- **Risk advisory (per order)** — flags at-risk stages and recommends a
-  specific next action, surfaced to the **Sales Manager**, **Project
-  Coordinator**, and **Company Owner** jointly. Complements, not replaces,
-  the deterministic deadline/blocker alerts in §4.4–4.5.
-- **Portfolio advisory (Company Owner only)** — cross-project patterns: a
-  PC or Sales Manager with multiple orders trending delayed, a supplier
-  with recurring FAT failures.
-- **Follow-up drafting** — draft a follow-up comment/message (on the right
-  channel — §6) to a supplier/customer based on current stage status.
-- **Monitoring digest** — daily cron scan across active orders and open
-  service tickets, to Company Owners portfolio-wide and, per project, its
-  Sales Manager and PC.
+Use cases: **status reports** (Sales Manager's per-project dashboard,
+Company Owner's portfolio roll-up); **risk advisory** per order (Sales
+Manager + PC + Owner); **portfolio advisory** (Owner only) for
+cross-project patterns; **follow-up drafting** on the correct comment
+channel; **monitoring digest** (daily, portfolio-wide to Owners, per
+project to its Sales Manager/PC).
 
-**Recommendations are advisory, not directives (resolves review point
-15):** every AI output is logged in `ai_reports` with a status
-(`new → acknowledged/dismissed/actioned`). The responsible person
-(Sales Manager, PC, or Owner depending on scope) explicitly acknowledges,
-dismisses, or turns it into a tracked action — the system never
-auto-executes a recommendation. **Portfolio advisory judges by delay
-*cause and responsibility*, not raw overdue counts** — a PC whose delays
-trace to the customer's import team or a supplier's manufacturing slip
-isn't scored the same as one whose delays trace to their own inaction;
-this uses the `responsible_party` field on `blockers` and the executor
-recorded on `commitment_changes`, not a naive tally.
+Every AI output is logged in `ai_reports` with an
+acknowledge/dismiss/action lifecycle — advisory only, never
+auto-executed. **Portfolio advisory attributes by `blockers.responsible_party`
+and `commitment_changes` context — never by raw overdue counts or by who
+typed an entry** — a PC whose delays trace to the customer's import team or
+a supplier's slip isn't scored the same as one whose delays trace to their
+own inaction.
 
-Rules:
-- API keys live server-side only, never sent to the frontend or accessible
-  to supplier/customer sessions.
-- Every AI call is scoped to data the requesting user is already allowed
-  to see.
-- AI features are on-demand or scheduled batch, not per page load.
+Rules: API keys server-side only, never sent to the frontend or accessible
+to external sessions. **The scope filter (which orders/data a user may see)
+is enforced inside the data-gathering function that assembles the AI
+prompt, not left to the caller** — a prompt built by joining several
+tables must never accidentally include another customer's row because one
+join forgot the filter. On-demand or scheduled batch only, never per page
+load.
 
 ## 11. Tech stack
 
-- **Backend**: PHP 8 + PDO/MySQL, REST API (JSON) — same pattern as the
-  team's housekeeping-system project, Bluehost shared hosting compatible.
-- **Frontend**: SPA (Vue or React), static build, role-based app shells for
-  internal / supplier / customer.
-- **Auth**: JWT (short-lived access + refresh token), `password_hash()`.
+- **Backend**: PHP 8 + PDO/MySQL, REST API (JSON) — Bluehost shared
+  hosting compatible, consistent with the team's other project.
+- **Frontend**: SPA (Vue or React), static build, role-based app shells.
+- **Auth**: JWT (short-lived access + refresh), `password_hash()`.
 - **File storage**: outside the public web root, served only through an
-  authenticated endpoint checking `visibility` and the requester's scope.
-- **Email**: PHPMailer via Bluehost SMTP for alerts and the AI digest.
-- **Scheduling**: Bluehost cPanel cron — `check_stage_deadlines.php`
-  (daily, §4.4–4.5), AI monitoring digest, AMC visit reminders.
+  authenticated endpoint checking scope on every request.
+- **Email**: PHPMailer via Bluehost SMTP.
+- **Scheduling**: two cron jobs, not one — `check_stage_deadlines.php`
+  (daily: stage/blocker deadlines, §4.4–4.5) and `check_ticket_sla.php`
+  (**hourly**: service-ticket response/resolution SLA and auto-close,
+  §5) — a hopeful daily-only design was the reviews' top infrastructure
+  finding, since an hour-level SLA can't be caught by a once-a-day scan.
 
 ## 12. Security notes
 
-- Force HTTPS (Bluehost's free SSL).
+- Force HTTPS.
 - Every external-facing endpoint re-checks the requester's actual scope
-  server-side on every request: `scope_project_id` for a customer,
-  `supplier_id` for a supplier.
+  server-side on every request.
 - Login rate-limiting/lockout on externally exposed portals.
-- `acceptances` and `commitment_changes` are **append-only** — never
-  edited or deleted, only superseded — since they're the audit trail for
-  contractual commitments and sign-offs.
-- Regular DB backups (cPanel automated + periodic manual dump) — this is
-  the system of record for SAT sign-off, handover, and service history.
+- `acceptances`, `commitment_changes`, `assignment_history`, and
+  `customer_import_tracking_updates` are **append-only** — the audit trail
+  for contractual commitments, sign-offs, and accountability.
+- Regular DB backups — this is the system of record for SAT sign-off,
+  handover, and service history.

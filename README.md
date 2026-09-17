@@ -1,8 +1,10 @@
 # Order & Project Lifecycle Management System
 
 A system to plan, execute and monitor customer projects end-to-end. **A
-Project is one customer deal; an Order is one machine** — a project can
-hold several orders, each running its own pipeline independently:
+Project is one customer deal; an Order is exactly one physical machine**
+(never a quantity field standing in for several — each machine gets its own
+FAT/SAT/installation/acceptance) — a project can hold several orders, each
+running its own pipeline independently:
 requirements → ordering → machine manufacturing progress at the supplier's
 site → machine testing material coordination → machine FAT readiness →
 shipment coordination → import clearance in Pakistan → delivery →
@@ -15,10 +17,12 @@ each of their own projects, same full visibility and AI advisories, scoped
 to their book of work, directing the **Project Coordinator** who does the
 actual data entry; plus Import Manager and Installation & Service Engineer.
 BLI has several people in each role, and each person gets one login
-covering every project assigned to them. External access is
-observer-plus-comment only, no data entry: one login per project for the
-**customer**, and one login per **supplier** company covering all of that
-supplier's projects with BLI.
+covering every project assigned to them. External logins **cannot edit
+pipeline progress**, but they do comment, raise service tickets, and
+record authorized acceptances (the customer's sign-off on SAT and
+handover is a real, required action, not a formality): one login per
+project for the **customer**, and one login per **supplier** company
+covering all of that supplier's projects with BLI.
 
 ## Structure
 

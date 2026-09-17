@@ -1,53 +1,45 @@
 # Order & Project Lifecycle Management System (Business Links International)
 
-**A Project is one customer deal; an Order is one machine.** A project can
-hold multiple orders, each running its own 12-stage pipeline independently:
-requirements → order placed → machine manufacturing progress → machine
-testing material coordination → machine FAT readiness → shipment
-coordination → import clearance in Pakistan → delivery → installation →
-SAT → training → handover → post-handover service/AMC. BLI does not track
-the supplier's own raw-material import — scope starts at manufacturing.
-Pakistan customs clearance and final delivery (stages 7–8) are executed by
-the **customer's own import team**, not BLI — BLI only coordinates.
+**A Project is one customer deal; an Order is exactly one physical
+machine** (never a `quantity` field standing in for several — each machine
+gets its own FAT/SAT/installation/acceptance). A project can hold multiple
+orders, each running its own 12-stage pipeline independently: requirements
+→ order placed → machine manufacturing progress → machine testing material
+coordination → machine FAT readiness → shipment coordination → import
+clearance in Pakistan → delivery → installation → SAT → training →
+handover → post-handover service/AMC. BLI does not track the supplier's
+raw-material import — scope starts at manufacturing. Pakistan customs
+clearance and delivery (stages 7–8) are executed by the **customer's own
+import team**, not BLI — BLI only coordinates.
 
 Internal roles, in accountability order:
 
-1. **Company Owner** — full visibility across every project/order: who's
-   assigned as Sales Manager and PC on each, how each is tracking, plus
-   every deadline/blocker alert and AI advisory at portfolio scope (not
-   just a digest). Also holds account administration (create/deactivate
-   logins, assign roles). No project data entry.
-2. **Sales Manager** — primary accountable custodian, assigned per
-   **project** (`projects.sales_manager_id`), covering every order in it.
+1. **Company Owner** — full visibility across every project/order, account
+   administration, and the configurable system thresholds (SLA windows,
+   escalation days). No project data entry.
+2. **Sales Manager** — accountable custodian, assigned per **project**.
    Full read visibility, directs the PC, holds acceptance authority
-   alongside the customer (§3.4 of ARCHITECTURE.md). Doesn't enter data
-   directly.
-3. **Project Coordinator** — the operational executor and sole data-entry
-   point for `order_stages` status. Assigned per project by default
-   (`projects.project_coordinator_id`), overridable per order. Accountable
-   to that project's Sales Manager.
+   (see the SAT/handover rule below), approves `stage_exceptions`,
+   order hold/cancel, and customer-facing date changes.
+3. **Project Coordinator** — sole writer of `order_stages.status`. Records
+   stage completion from the Engineer's evidence for stages 9–12. Assigned
+   per project by default, overridable per order.
 4. **Import Manager** — global advisor, comment only, no edit rights; joins
-   the PC and Sales Manager on stages 6–8 only when the customer's import
-   team asks for help.
-5. **Installation & Service Engineer** — assigned per **order**
-   (`orders.installation_engineer_id`, can differ machine-to-machine even
-   within one project). Has direct write access to the stage 9–11 evidence
-   tables (installation report, `fat_sat_records`/SAT, `training_records`)
-   — but the PC still flips `order_stages.status` to `completed` from that
-   evidence. Manages post-handover service tickets/AMC directly, no PC
-   hand-off. Accountable to that order's Sales Manager.
+   the PC/Sales Manager on stages 6–8 only when the customer's import team
+   asks.
+5. **Installation & Service Engineer** — assigned per **order**. Writes the
+   stage 9–12 *evidence* tables directly (`engineer_reports` for
+   installation and handover-readiness, `fat_sat_records` for SAT,
+   `training_records`) — never `order_stages.status` itself. Manages
+   post-handover service tickets/AMC directly, no PC hand-off.
 
-BLI has multiple people per role (several PCs, several Sales Managers,
-etc.) — **one login per person**, access is every project/order that
-person is assigned to, not role-wide (except Company Owner and Import
-Manager, who are role-wide by design).
-
-External: **one customer login per project** (`scope_project_id` — sees
-every machine/order in that project), **one supplier login per supplier
-company** covering every order that company supplies (`supplier_id`) —
-observer + comment only, no data entry, for both. Comments are channel-
-scoped (`internal`/`customer`/`supplier`) — a customer never sees the
-supplier channel or vice versa.
+External: **one customer login per project** (`scope_project_id`, sees
+every order in it), **one supplier login per supplier company** spanning
+all their orders (`supplier_id`) — comment-only (channel-scoped:
+`internal`/`customer`/`supplier`, never crossed), plus acceptance authority
+for the customer specifically. Neither edits pipeline data, but both can
+comment, raise tickets, and record authorized acceptances — that's real
+data entry, just not pipeline data.
 
 Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 `docs/ROADMAP.md` — check this before starting new work.
@@ -58,52 +50,67 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 - Frontend: SPA (Vue/React), static build, calls the REST API
 - Auth: JWT (short-lived access + refresh)
 - Hosting target: Bluehost shared/cPanel hosting
+- Two crons, not one: `check_stage_deadlines.php` (daily) and
+  `check_ticket_sla.php` (**hourly** — an hour-level SLA can't be caught
+  by a once-a-day scan)
 
 ## Non-negotiable rules
 
 - Every request is authorized server-side against the requester's actual
-  scope — Sales Manager via `project.sales_manager_id`, PC via
-  `order.project_coordinator_id` (falling back to the project's default),
-  Engineer via `order.installation_engineer_id`, customer via
-  `scope_project_id`, supplier via `supplier_id` — never trust a
-  client-supplied id alone. External logins are the top cross-tenant
-  leakage risk in this system.
-- `documents.visibility` and `comments.channel` are enforced on every read
-  path, not just in the UI — internal content never reaches an external
-  login by accident.
-- Project Coordinator is the only role that writes `order_stages.status` —
-  the Installation & Service Engineer writes stage 9–11 *evidence* tables
-  directly, but not the stage status itself. Don't add status write access
-  for other roles without confirming with the user first.
-- Target/planned dates per stage are entered manually by the PC — no
-  lead-time template auto-fills them. Any change to a `planned_end` or
-  `target_handover_date` must write a `commitment_changes` row (reason,
-  who, whether the customer was told) — never a silent UPDATE.
-- A `conditional_pass` FAT/SAT result is usable only once it has an
-  `acceptances` record from the Sales Manager or the customer (whichever
-  is first) — closing every punch-list item is NOT itself acceptance. A
-  `critical`-severity open punch item forces `fail`, never
-  `conditional_pass`.
-- `acceptances` and `commitment_changes` are append-only — never edited or
+  scope (project/order assignment, `scope_project_id`, or `supplier_id`)
+  — never a client-supplied id alone.
+- `documents.visibility`/`shared_with_supplier_id` and `comments.channel`/
+  `shared_with_supplier_id` are enforced on every read — a project with
+  machines from multiple suppliers must never let one supplier see another
+  supplier's project-level shared item.
+- PC is the only writer of `order_stages.status`. The Engineer writes
+  stage 9–12 evidence tables directly but never the status field itself.
+- **SAT and Handover require genuine customer acceptance to complete** —
+  `acceptances.constitutes_customer_acceptance` must be true. A customer's
+  own login satisfies this directly; a Sales Manager can only satisfy it
+  by attaching `customer_authorization_evidence_document_id` (proof the
+  customer actually agreed). A bare Sales Manager say-so records the
+  decision but does NOT complete the stage, and notifies the Company
+  Owner (this is BLI proceeding at its own risk, a liability call). FAT
+  conditional-pass doesn't need this extra evidence — it's a pre-shipment
+  internal risk call, either Sales Manager or customer suffices.
+- An `acceptances` record is tied to a specific `target_record_id` (the
+  exact FAT/SAT/training/report revision). If that record is later
+  superseded by a retest, the old acceptance no longer satisfies
+  completion — a fresh one is required against the new record.
+- A `critical`-severity open punch item forces `fail`, never
+  `conditional_pass`. A `stage_exceptions` row can never override a `fail`
+  or an open critical item — only open minor items or a procedural delay,
+  and only a Sales Manager/Owner can approve one.
+- Completion means actually finished, not just reported:
+  `engineer_reports.completion_status` requires an explicit
+  complete/incomplete call with `outstanding_issues`, not just photos.
+  `manufacturing_milestones` can't be empty before stage 3 starts.
+- Target/planned dates: PC can freely log internal-only replanning:
+  any change to `target_handover_date`, or to a date already communicated
+  to the customer, requires `approved_by` = Sales Manager or Owner —
+  written to `commitment_changes`, never a silent UPDATE.
+- Blocked stages stay in the ordinary deadline scan (delay keeps accruing)
+  AND get a `blockers` row with required `description`/`responsible_party`/
+  `next_action`/`next_review_date`. Escalate to Sales Manager + Owner after
+  7 days blocked or a missed `next_review_date`.
+- `responsible_party` on `blockers` is a constrained enum
+  (`bli_internal|supplier|customer|third_party`) — AI portfolio advisory
+  attributes delay by this field, never by who typed the entry.
+- Stage 6 (shipment) completion requires `shipments.actual_dispatch_date`
+  — a freight booking alone is `in_progress`, not `completed`.
+- `acceptances`, `commitment_changes`, `assignment_history`, and
+  `customer_import_tracking_updates` are append-only — never edited or
   deleted, only superseded.
-- A `blocked` stage requires `blockers.description` /
-  `responsible_party` / `next_action` / `next_review_date` — these are
-  required, not optional. Blocked stages are monitored harder than normal
-  ones, never excluded from the deadline cron. Escalate to Sales Manager +
-  Company Owner after 7 days blocked without resolution.
-- The daily deadline-check job is the source of truth for `delayed` status
-  and at-risk notifications (`docs/ARCHITECTURE.md` §4.4–4.5) — don't
-  hand-roll a second overdue check elsewhere.
-- AI risk-advisory output is surfaced to the Sales Manager, PC, and Company
-  Owner jointly per order; portfolio-pattern advisory is Owner-only. Every
-  AI output is logged in `ai_reports` with a status
-  (`new/acknowledged/dismissed/actioned`) — it's advisory, the system never
-  auto-executes a recommendation. Portfolio advisory judges by delay cause/
-  responsibility (via `blockers.responsible_party`), not raw overdue counts.
-- No payment/value tracking is in scope — `contract_value`/`currency` are
-  static reference fields only, not monitored or reported on.
-- AI provider keys (Claude/Gemini/ChatGPT) live server-side only, never
-  sent to the frontend.
+- Service tickets: `resolved` (Engineer fixed it) ≠ `closed`
+  (`customer_confirmed` or `auto_closed_no_response` after 5 business days
+  of silence — never presented as if the customer agreed). SLA clocks run
+  in business hours, checked hourly.
+- No payment/value tracking — `contract_value`/`currency` are static
+  reference fields only.
+- AI provider keys live server-side only. The scope filter for an AI
+  prompt is enforced inside the data-gathering function, not left to the
+  caller.
 - Uploaded documents are served through an authenticated endpoint, never
   as direct static links.
 
