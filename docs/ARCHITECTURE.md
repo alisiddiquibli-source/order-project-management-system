@@ -31,9 +31,9 @@ the Coordinator (see §4 for exactly who does what).
 | 3 | Machine manufacturing progress (supplier site) | Supplier | Project Coordinator |
 | 4 | Machine testing material coordination | Project Coordinator / Supplier | Project Coordinator |
 | 5 | Machine FAT readiness / FAT execution | Supplier, witnessed remotely/on-site | Project Coordinator |
-| 6 | Shipment coordination | Project Coordinator (advised by Import Manager) | Project Coordinator |
-| 7 | Import clearance in Pakistan | Import Manager advises; clearing agent executes | Project Coordinator |
-| 8 | Delivery to customer | Project Coordinator | Project Coordinator |
+| 6 | Shipment coordination | Project Coordinator | Project Coordinator |
+| 7 | Import clearance in Pakistan | **Customer's own import team** — BLI only coordinates | Project Coordinator |
+| 8 | Delivery to customer | **Customer's own import team** — BLI only coordinates | Project Coordinator |
 | 9 | Installation at customer site | Installation & Service Engineer | Project Coordinator |
 | 10 | SAT (Site Acceptance Test) | Installation & Service Engineer + customer | Project Coordinator |
 | 11 | Training | Installation & Service Engineer | Project Coordinator |
@@ -42,16 +42,19 @@ the Coordinator (see §4 for exactly who does what).
 
 BLI does not track the supplier's own raw-material import/procurement —
 scope starts once the machine is in manufacturing at the supplier's site.
+BLI also does not execute Pakistan customs clearance or final delivery
+(stages 7–8) — that's the **customer's own import team's** job. BLI's role
+there is coordination: the Project Coordinator stays the point of contact,
+and the **Import Manager joins as an advisor alongside the Project
+Coordinator only if the customer's import team asks for help** (e.g.,
+document questions, HS code guidance) — not a standing responsibility on
+every order. The system still tracks stage 7–8 status (so the pipeline view
+stays complete), updated by the Project Coordinator based on what the
+customer's team reports.
 
 Stage status: `not_started`, `in_progress`, `completed`, `delayed`, `blocked`.
 Stages are sequential by default but the model allows overlap — enforced by
 planning, not hard-coded in the database.
-
-**Assumption to confirm:** Import Manager is a pure advisor with no data-entry
-duties anywhere — they see relevant orders and comment, but never change a
-stage's status. If in practice they should be able to mark shipment/customs
-stages complete themselves, tell me and I'll split stage 6/7 ownership out to
-them instead of the Coordinator.
 
 ## 3. Post-handover service module
 
@@ -78,7 +81,7 @@ portfolio.
 | **Company Owner** | By role, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
 | **Project Coordinator** | Assigned per order (1 per order) | Full read/write on their assigned order(s): creates the order, updates all 12 stages + documents + shipments. The operational hub. |
 | **Sales Manager** | Assigned per order (their customer relationship) | Read + comment on their assigned order(s); sees contract/customer info; notified on milestones and delays affecting that customer. |
-| **Import Manager** | Global advisory role (not per-order) | Read access to all orders; comment rights focused on shipment/customs-relevant stages (6, 7). No stage-status edit rights. |
+| **Import Manager** | Global advisory role (not per-order) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the Project Coordinator, only when the customer's import team needs input. No stage-status edit rights. |
 | **Installation & Service Engineer** | Assigned per order | Full read/write on stages 9–12 for their assigned order(s), plus all service tickets/AMC schedules for those orders after handover. |
 | **Supplier** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees stages/documents relevant to their side (3–6: manufacturing, testing material, FAT, shipment coordination), not commercial terms with the customer. |
 | **Customer** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees overall progress + shared documents, can raise a service ticket post-handover, and confirms SAT sign-off as a specific comment/action. |

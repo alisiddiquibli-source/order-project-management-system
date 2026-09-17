@@ -6,11 +6,14 @@ at supplier site → machine testing material coordination → machine FAT
 readiness → shipment coordination → import clearance in Pakistan → delivery
 → installation → SAT → training → handover → service/AMC. BLI does not
 track the supplier's own raw-material import — scope starts at manufacturing.
+Pakistan customs clearance and final delivery (stages 7–8) are executed by
+the **customer's own import team**, not BLI — BLI only coordinates.
 
 Internal roles: Company Owner (portfolio view), Project Coordinator (single
 point of data entry, owns every order assigned to them), Sales Manager
-(customer relationship, read + comment), Import Manager (global advisor on
-import/customs, comment only, no edit rights), Installation & Service
+(customer relationship, read + comment), Import Manager (global advisor,
+comment only, no edit rights — joins the Project Coordinator on stages 6–8
+only when the customer's import team asks for help), Installation & Service
 Engineer (owns installation/SAT/training/handover + post-handover service
 for their assigned orders).
 
