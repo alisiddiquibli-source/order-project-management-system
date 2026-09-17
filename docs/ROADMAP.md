@@ -10,11 +10,13 @@ begins.
   with approval rule), stage dependency/exception rules (severity-aware,
   never overriding a fail), manufacturing milestones (non-empty
   requirement), `engineer_reports`/`fat_sat_records`/`training_records`
-  evidence tables, the `acceptances` model (with the customer-acceptance
-  requirement for SAT/handover), blocked-stage logging + escalation,
-  document upload, channel-scoped comments with per-supplier project-level
-  sharing, the daily deadline/blocker cron, Sales Manager and Company
-  Owner dashboards. This is the biggest phase — the whole operational core.
+  evidence tables, FAT/SAT photo & video capture via Google Drive
+  alongside locally-stored PDF reports (§4.3.1), the `acceptances` model
+  (with the customer-acceptance requirement for SAT/handover), blocked-stage
+  logging + escalation, document upload, channel-scoped comments with
+  per-supplier project-level sharing, the daily deadline/blocker cron,
+  Sales Manager and Company Owner dashboards. This is the biggest phase —
+  the whole operational core.
 - [ ] **Phase 2 — External logins**
   One customer login per project (`scope_project_id`) and one supplier
   login per supplier company (`supplier_id`) — comment-only, channel-

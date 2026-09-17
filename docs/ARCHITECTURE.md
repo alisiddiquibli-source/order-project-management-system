@@ -290,6 +290,47 @@ training_records  (id, order_stage_id, scheduled_date, actual_date,
 describing anything not done — a report full of photos isn't itself proof
 of completion if the Engineer hasn't affirmatively said so.
 
+### 4.3.1 FAT/SAT media: photos, video, and documents
+
+FAT and SAT need photo/video evidence alongside the PDF report, but video
+in particular has no business sitting on Bluehost shared hosting's limited
+disk quota. Split by weight, not by convenience:
+
+- **PDF reports, certificates, other small documents** — stored locally,
+  served only through the authenticated `documents` endpoint (unchanged).
+- **Photos and video** — the file itself lives in a BLI-owned Google Drive
+  folder; the system stores only the Drive file reference.
+
+```
+documents (..., storage_type[local|google_drive], fat_sat_record_id)
+```
+
+`documents.file_path` holds a local relative path when `storage_type =
+local`, or a Google Drive file ID when `storage_type = google_drive`.
+`fat_sat_record_id` (alongside the existing `project_id`/`order_id`/
+`order_stage_id`) ties a photo/video to the **specific FAT or SAT attempt**
+it documents — so a retest's photos never get mixed up with the failed
+attempt's.
+
+**This is a deliberate trade-off, not a free upgrade — flagging it
+plainly:** everything else in this system enforces visibility/channel
+scoping on every read, server-side, with no exceptions. A Google Drive
+link doesn't get that for free — Drive's own sharing model governs who can
+open the file once they have the link. The mitigation: the backend never
+exposes the raw Drive link to anyone before checking that requester's
+`visibility`/`channel` scope itself (same authorization check as any other
+document) — so an unauthorized user never *learns* the link through this
+system. But if a link ever leaves the system by another route (forwarded
+in an email, a screenshot passed along), Drive's own permission on that
+file — not this system — is what stops further access from there. Keep
+the BLI Drive folder's sharing set to the narrowest option Drive allows
+("Anyone with the link" at most, never indexed/discoverable), and treat
+FAT/SAT video/photo as **lower assurance** than the locally-served,
+fully access-controlled PDFs. If this trade-off isn't acceptable later
+(e.g., a dispute where an SAT video's chain of custody matters), the fix
+is real Drive API per-file permissions (granting access to specific Google
+accounts) instead of link-sharing — heavier to build, not done in Phase 1.
+
 ### 4.4 Deadline & at-risk alerts — continuous, not one-shot
 
 A daily cron (`check_stage_deadlines.php`) evaluates **every non-completed
@@ -382,10 +423,16 @@ comments  (id, project_id, order_id, order_stage_id,
                                        -- order_id is null, and channel=supplier
            user_id, message, created_at)
 
-documents (id, project_id, order_id, order_stage_id, type, file_path,
+documents (id, project_id, order_id, order_stage_id, fat_sat_record_id,
+           type, storage_type[local|google_drive], file_path,
            uploaded_by, visibility[internal|supplier|customer|shared],
            shared_with_supplier_id)  -- same rule as comments, above
 ```
+
+`storage_type` and `fat_sat_record_id` support FAT/SAT photo/video capture
+(§4.3.1) — `file_path` is a local path or a Google Drive file ID depending
+on `storage_type`, and `fat_sat_record_id` ties media to the exact FAT/SAT
+attempt it documents, not just the stage generally.
 
 Order-level items are already isolated (an order has exactly one
 `supplier_id`). The gap was **project-level** shared items on a
@@ -533,9 +580,9 @@ blockers           (id, order_stage_id, description, responsible_party,
                     responsible_party_detail, next_action, next_review_date,
                     raised_at, raised_by, resolved_at, resolved_by)
 
-documents          (id, project_id, order_id, order_stage_id, type,
-                    file_path, uploaded_by, visibility,
-                    shared_with_supplier_id)
+documents          (id, project_id, order_id, order_stage_id,
+                    fat_sat_record_id, type, storage_type, file_path,
+                    uploaded_by, visibility, shared_with_supplier_id)
 
 shipments          (id, order_id, carrier, mode, port_of_loading,
                     port_of_discharge, bl_awb_number, etd, eta,
@@ -655,8 +702,12 @@ seven times.** Concretely:
   hosting compatible, consistent with the team's other project.
 - **Frontend**: SPA (Vue or React), static build, role-based app shells.
 - **Auth**: JWT (short-lived access + refresh), `password_hash()`.
-- **File storage**: outside the public web root, served only through an
-  authenticated endpoint checking scope on every request.
+- **File storage**: PDFs/documents outside the public web root, served
+  only through an authenticated endpoint checking scope on every request.
+  FAT/SAT photos and video live in a BLI-owned **Google Drive** folder
+  instead (§4.3.1) — Bluehost shared hosting's disk quota isn't built for
+  video. The backend talks to Drive via a service account (Drive API),
+  never a personal account's OAuth token.
 - **Email**: PHPMailer via Bluehost SMTP.
 - **Scheduling**: two cron jobs, not one — `check_stage_deadlines.php`
   (daily: stage/blocker deadlines, §4.4–4.5) and `check_ticket_sla.php`

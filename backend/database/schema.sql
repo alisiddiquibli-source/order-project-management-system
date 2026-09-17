@@ -234,7 +234,14 @@ CREATE TABLE documents (
     project_id              INT UNSIGNED NULL,   -- one of project_id/order_id set
     order_id                INT UNSIGNED NULL,
     order_stage_id          INT UNSIGNED NULL,
+    -- ties FAT/SAT photos/video to the exact attempt they document (retests
+    -- don't inherit the prior attempt's media). FK added below, after
+    -- fat_sat_records exists — the two tables reference each other.
+    fat_sat_record_id       INT UNSIGNED NULL,
     type                    VARCHAR(50) NOT NULL,  -- e.g. PO, FAT_report, SAT_report, BOL, handover_certificate
+    -- 'google_drive' for FAT/SAT photo/video (file_path = Drive file ID);
+    -- 'local' for everything else (file_path = local relative path)
+    storage_type            ENUM('local','google_drive') NOT NULL DEFAULT 'local',
     file_path               VARCHAR(500) NOT NULL,
     uploaded_by             INT UNSIGNED NOT NULL,
     visibility              ENUM('internal','supplier','customer','shared') NOT NULL DEFAULT 'internal',
@@ -249,7 +256,8 @@ CREATE TABLE documents (
     CONSTRAINT fk_documents_shared_supplier FOREIGN KEY (shared_with_supplier_id) REFERENCES suppliers(id),
     INDEX idx_documents_project (project_id),
     INDEX idx_documents_order (order_id),
-    INDEX idx_documents_order_stage (order_stage_id)
+    INDEX idx_documents_order_stage (order_stage_id),
+    INDEX idx_documents_fat_sat_record (fat_sat_record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -291,6 +299,9 @@ CREATE TABLE fat_sat_records (
     CONSTRAINT fk_fsr_report_document FOREIGN KEY (report_document_id) REFERENCES documents(id),
     INDEX idx_fsr_order_stage (order_stage_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE documents
+    ADD CONSTRAINT fk_documents_fat_sat_record FOREIGN KEY (fat_sat_record_id) REFERENCES fat_sat_records(id);
 
 CREATE TABLE punch_list_items (
     id                      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

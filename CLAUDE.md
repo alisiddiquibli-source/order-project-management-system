@@ -44,6 +44,31 @@ data entry, just not pipeline data.
 Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 `docs/ROADMAP.md` — check this before starting new work.
 
+## Working style (standing instruction)
+
+**Design and build everything as a senior software developer would, and
+hold that standard across every effort in this repo, not just the first
+one.** Concretely, what that means here:
+
+- Validate before claiming something works — a schema is proven by loading
+  it into a real database and inserting real rows through it, not by
+  reading it back and asserting it looks right. A backend skeleton is
+  proven by actually hitting the endpoint. (This is precedent, not
+  aspiration — that's exactly how the schema and backend skeleton were
+  verified in this repo.)
+- Flag trade-offs and risks plainly, in the docs, at the point they're
+  introduced — e.g., §4.3.1's Google Drive access-control trade-off — never
+  gloss over a weaker guarantee to make a feature sound simpler than it is.
+- Clean, idiomatic code with meaningful names, no dead scaffolding left
+  behind "just in case," no premature abstraction for a hypothetical future
+  requirement.
+- Small, well-described commits — one coherent change per commit, not a
+  grab-bag.
+- When a request implies a design decision (not just a code change), make
+  the decision explicitly and record it in `docs/ARCHITECTURE.md`/this
+  file, the same way every prior round of this project's design has been
+  recorded — don't let a decision live only in a chat message.
+
 ## UX principle (standing requirement — see ARCHITECTURE.md §11.1)
 
 Seven very different audiences use this system. **Every screen must be
@@ -64,6 +89,8 @@ plan to "prettify later."
 - Two crons, not one: `check_stage_deadlines.php` (daily) and
   `check_ticket_sla.php` (**hourly** — an hour-level SLA can't be caught
   by a once-a-day scan)
+- FAT/SAT photos and video: Google Drive (service account, not a personal
+  OAuth token) — see the media rule below. PDFs stay on local storage.
 
 ## Non-negotiable rules
 
@@ -124,6 +151,15 @@ plan to "prettify later."
   caller.
 - Uploaded documents are served through an authenticated endpoint, never
   as direct static links.
+- FAT/SAT photos/video live in Google Drive (`documents.storage_type =
+  google_drive`, `file_path` = Drive file ID), tied to the specific
+  `fat_sat_record_id` they document, not just the stage. The backend never
+  returns the Drive link to a request that hasn't already passed the
+  normal `visibility`/`channel` scope check — same authorization gate as
+  any other document, even though the file itself lives off-server. This
+  is knowingly lower-assurance than local PDFs (Drive's own link-sharing
+  governs the file once someone has the link) — documented as a trade-off
+  in `docs/ARCHITECTURE.md` §4.3.1, not silently accepted.
 
 ## Conventions
 
