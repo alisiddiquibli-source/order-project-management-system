@@ -1,13 +1,20 @@
-# Order & Project Lifecycle Management System
+# Order & Project Lifecycle Management System (Business Links International)
 
-Tracks equipment/project orders from requirement capture through handover:
-ordering → import & manufacturing at supplier site → testing material
-supply → FAT → shipment coordination → import clearance in Pakistan →
-delivery → installation → SAT → training → handover.
+Tracks equipment/project orders from requirement capture through handover
+and ongoing post-handover service: ordering → import & manufacturing at
+supplier site → testing material supply → FAT → shipment coordination →
+import clearance in Pakistan → delivery → installation → SAT → training →
+handover → service/AMC.
 
-Three audiences: internal team (full access), suppliers (external login,
-scoped to their assigned stages), customers (external login, scoped to their
-own order, read-only + SAT sign-off).
+Internal roles: Company Owner (portfolio view), Project Coordinator (single
+point of data entry, owns every order assigned to them), Sales Manager
+(customer relationship, read + comment), Import Manager (global advisor on
+import/customs, comment only, no edit rights), Installation & Service
+Engineer (owns installation/SAT/training/handover + post-handover service
+for their assigned orders).
+
+External: one supplier login + one customer login **per project** (not per
+company) — observer + comment only, scoped by `scope_order_id`.
 
 Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 `docs/ROADMAP.md` — check this before starting new work.
@@ -21,12 +28,16 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 
 ## Non-negotiable rules
 
-- Every request touching an order/stage/document is authorized against the
-  requesting user's `company_id` server-side — never trust a client-supplied
-  order ID alone. Suppliers and customers are external parties; cross-tenant
-  leakage is the top risk in this system.
+- Every request touching an order/stage/document/comment is authorized
+  against the requesting user's assigned order(s) or `scope_order_id`
+  server-side — never trust a client-supplied order ID alone. External
+  logins are the top cross-tenant leakage risk in this system.
 - `documents.visibility` (`internal|supplier|customer|shared`) is enforced on
   every read path, not just in the UI.
+- Project Coordinator is the only role that writes `order_stages` status by
+  default — don't add write access for other internal roles without
+  confirming with the user first, it's a deliberate single-point-of-entry
+  design.
 - AI provider keys (Claude/Gemini/ChatGPT) live server-side only, never sent
   to the frontend.
 - Uploaded documents are served through an authenticated endpoint, never as
