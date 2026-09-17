@@ -44,6 +44,21 @@ begins.
   acknowledge/dismiss/action lifecycle on `ai_reports`, follow-up
   drafting, monitoring digest. Scope filter enforced in the data-gathering
   layer, not the caller.
+- [~] **Frontend** (not one of the numbered backend phases — tracked
+  alongside them)
+  React + TypeScript + Vite + Tailwind. Built: login, JWT handling with
+  silent refresh, Company Owner's portfolio dashboard, Project
+  Coordinator's order list + order detail page with live stage status
+  updates (a real write path — API business-rule rejections are shown to
+  the user verbatim, not swallowed). Verified with a real Chromium
+  browser against a live backend + database, screenshotted, not just
+  type-checked. Pending: Sales Manager/Import Manager/Installation &
+  Service Engineer/Supplier/Customer dashboards (they land on a
+  placeholder today — login and API access already work for them);
+  evidence sub-forms (milestones, FAT/SAT, engineer reports, training,
+  acceptances) in the order detail page; a committed Playwright e2e
+  suite with real seed fixtures (a one-off manual smoke test was run
+  during development, not committed as-is).
 - [ ] **Phase 6 — Bluehost deployment**
   cPanel MySQL DB, PHP deployment, static frontend build, SSL, both cron
   jobs (daily + hourly), go-live.
@@ -76,6 +91,11 @@ and fixed in the process (see `CLAUDE.md`'s "Known PHP/PDO gotcha" and
 stage-lookup notes) — caught precisely because testing went beyond the
 first happy path.
 
+Frontend — a real vertical slice, not just scaffolding: Company Owner and
+Project Coordinator dashboards work end-to-end against the live backend,
+verified in an actual Chromium browser (screenshots taken, not just
+"it compiles"). Other five roles' dashboards are the next frontend work.
+
 Not yet started: Phase 3 (shipment/customs detail endpoints — currently
 only reachable by direct DB write, no API), Phase 4 (post-handover
-service), Phase 5 (AI layer), the frontend, and Phase 6 (deployment).
+service), Phase 5 (AI layer), and Phase 6 (deployment).

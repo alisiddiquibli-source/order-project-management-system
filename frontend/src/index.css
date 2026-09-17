@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  /* Status colors — used consistently everywhere a stage/order status
+     appears, per the UX principle in docs/ARCHITECTURE.md §11.1: status
+     must be readable at a glance, never ambiguous or purely textual. */
+  --color-status-not_started: var(--color-slate-400);
+  --color-status-in_progress: var(--color-blue-500);
+  --color-status-completed: var(--color-emerald-500);
+  --color-status-delayed: var(--color-amber-500);
+  --color-status-blocked: var(--color-red-500);
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-500: #4f46e5;
+  --color-brand-600: #4338ca;
+  --color-brand-700: #3730a3;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}

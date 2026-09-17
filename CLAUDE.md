@@ -211,6 +211,33 @@ plan to "prettify later."
   whitelists extensions and never trusts the client-supplied filename for
   the stored path.
 
+## Frontend codebase map
+
+React + TypeScript + Vite + Tailwind CSS v4, in `frontend/`. See
+`frontend/README.md` for dev setup. Structure mirrors the backend's
+separation of concerns:
+
+- `src/lib/api.ts` — the one fetch wrapper every page uses. Attaches the
+  JWT, retries exactly once on a 401 via silent refresh, then forces
+  re-login — never loops.
+- `src/lib/auth.tsx` — `AuthProvider`/`useAuth()`, the logged-in user's
+  identity and role (drives which dashboard renders).
+- `src/lib/types.ts` — TypeScript shapes mirroring the backend's JSON —
+  keep these in sync when a response shape changes.
+- `src/components/StatusBadge.tsx` — the *only* place a stage/order
+  status renders anywhere in the app. Never hand-roll a status pill
+  elsewhere — status must read identically on every screen (§11.1).
+- `src/pages/` — one file per role's home view
+  (`OwnerDashboardPage`, `CoordinatorDashboardPage`), routed by role in
+  `App.tsx`'s `HomePage`. A role with no dedicated view yet gets
+  `ComingSoonPage`, not a broken screen — add its real dashboard as its
+  own file when built, don't retrofit `ComingSoonPage` into one.
+- Business-rule rejections from the API (422s) are shown to the user
+  verbatim (see `StageUpdateForm` in `OrderDetailPage.tsx`) — that's
+  deliberate, not a placeholder: the whole point of this system is that
+  those rules are real, so the UI shouldn't hide them behind a generic
+  "something went wrong."
+
 ## Known PHP/PDO gotcha — hit twice while building this, watch for it
 
 `Database::connection()` deliberately sets
