@@ -178,7 +178,10 @@ plan to "prettify later."
   `EngineerReportRepository`, `TrainingRecordRepository`,
   `AcceptanceRepository`, `StageExceptionRepository`,
   `ShipmentRepository`, `CustomerImportTrackingRepository` (+ its
-  append-only `_updates` history child).
+  append-only `_updates` history child), `NotificationRepository` (writes
+  the `notifications` row and fires the best-effort email alongside it —
+  every notification, cron- or comment-triggered, goes through this, never
+  a raw `INSERT INTO notifications`).
   `findByIdForUser()`-style methods return `null` for both "doesn't
   exist" and "not authorized" — routes turn that into a 404, never a 403,
   so existence is never leaked. `DocumentRepository`/`CommentRepository`
@@ -206,6 +209,12 @@ plan to "prettify later."
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
   safe to re-run same-day without duplicate notifications (dedupes on
   `(user_id, order_id, type, DATE(created_at))`).
+- `src/Notifications/Mailer.php` — thin PHPMailer/SMTP wrapper, called
+  only from `NotificationRepository`. Best-effort by design: catches its
+  own exceptions and logs to `error_log`, never throws — a mail-server
+  outage must never break the API request or cron run that triggered the
+  notification. With `MAIL_HOST` unset (local dev) it logs instead of
+  attempting delivery, so local work never needs real SMTP creds.
 - `storage/documents/` — local file storage for uploaded PDFs, outside
   `public/`, never served as a static file — only through the
   authenticated `/api/documents/{id}/file` endpoint. Actual files are

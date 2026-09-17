@@ -38,9 +38,22 @@ begins.
   entry rather than overwriting; a second import-tracking record on an
   already-tracked stage was correctly rejected; Sales Manager correctly
   blocked from creating a shipment (PC-only).
-- [ ] **Phase 3b — Notifications**
-  Email delivery of the Phase 1 deadline/blocker alerts, comment
-  notifications to relevant roles.
+- [x] **Phase 3b — Notifications**
+  SMTP email delivery (PHPMailer) alongside every `notifications` row —
+  best-effort, never blocks the write that triggered it (a mail-server
+  failure is logged, not thrown). `Bli\Models\NotificationRepository`
+  centralizes both halves: the daily deadline/blocker cron's existing
+  same-day dedup, and a new per-comment notification with no dedup (one
+  real event, one notification). Comment notifications resolve recipients
+  by channel — internal reaches the order's PC/Sales Manager/every Owner;
+  customer and supplier channels reach that same internal set plus the
+  relevant external login(s) (the project's customer account, or the
+  named supplier company's account), and the author never gets their own
+  comment back. Verified against a live server: a real SMTP debug server
+  received the actual emails (not just the DB rows) for an internal, a
+  customer, and a supplier comment, each with the correct recipient set
+  and no cross-channel leakage; the deadline cron's idempotency held
+  across a second run through the shared repository.
 - [ ] **Phase 4 — Post-handover service module**
   `amc_contracts`/`amc_visits`, `service_tickets` with resolved-vs-closed,
   business-hours SLA on the **hourly** `check_ticket_sla.php` cron,
@@ -108,5 +121,14 @@ Phase 3a (shipment/customs API) — complete; every core-pipeline stage
 (1–12) is now reachable through a real, tested API endpoint, none left
 requiring a direct DB write to exercise.
 
-Not yet started: Phase 3b (notifications), Phase 4 (post-handover
-service), Phase 5 (AI layer), and Phase 6 (deployment).
+Phase 3b (notifications) — complete; email now rides alongside every
+notification the system already generates, verified against a real SMTP
+server, not just a mocked send.
+
+While in the area: bumped `firebase/php-jwt` from ^6.10 to ^7.1
+(`composer audit` had flagged CVE-2025-45769 — low severity, and not in a
+code path this app uses, but a one-line version bump with no API change,
+so fixed rather than left noted).
+
+Not yet started: Phase 4 (post-handover service), Phase 5 (AI layer), and
+Phase 6 (deployment).

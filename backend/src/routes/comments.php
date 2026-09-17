@@ -7,6 +7,7 @@ use Bli\Http\OrderAccess;
 use Bli\Http\Request;
 use Bli\Http\Response;
 use Bli\Models\CommentRepository;
+use Bli\Models\NotificationRepository;
 use Bli\Models\ProjectRepository;
 
 /** @var \Bli\Http\Router $router */
@@ -44,6 +45,8 @@ $router->post('/api/orders/{id}/comments', function (Request $request, array $pa
         // single supplier_id — shared_with_supplier_id only matters (and is
         // required) at the project level, for a multi-supplier project.
     ], (int) $claims['sub']);
+
+    NotificationRepository::notifyForNewComment($comment);
 
     Response::json($comment, 201);
 });
@@ -94,6 +97,8 @@ $router->post('/api/projects/{id}/comments', function (Request $request, array $
         'shared_with_supplier_id' => $sharedWithSupplierId,
         'message' => $message,
     ], (int) $claims['sub']);
+
+    NotificationRepository::notifyForNewComment($comment);
 
     Response::json($comment, 201);
 });

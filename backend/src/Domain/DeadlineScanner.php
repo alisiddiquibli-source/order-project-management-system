@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Bli\Domain;
 
 use Bli\Config\Database;
+use Bli\Models\NotificationRepository;
 use PDO;
 
 /**
@@ -145,24 +146,7 @@ final class DeadlineScanner
         }
 
         foreach (array_unique(array_filter($recipientIds)) as $userId) {
-            if ($this->alreadyNotifiedToday((int) $userId, $orderId, $type)) {
-                continue;
-            }
-
-            $db->prepare(
-                'INSERT INTO notifications (user_id, order_id, type, message) VALUES (:user_id, :order_id, :type, :message)'
-            )->execute(['user_id' => $userId, 'order_id' => $orderId, 'type' => $type, 'message' => $message]);
+            NotificationRepository::createIfNotAlreadySentToday((int) $userId, $orderId, $type, $message);
         }
-    }
-
-    private function alreadyNotifiedToday(int $userId, int $orderId, string $type): bool
-    {
-        $stmt = Database::connection()->prepare(
-            'SELECT 1 FROM notifications
-             WHERE user_id = :user_id AND order_id = :order_id AND type = :type AND DATE(created_at) = CURDATE()'
-        );
-        $stmt->execute(['user_id' => $userId, 'order_id' => $orderId, 'type' => $type]);
-
-        return $stmt->fetch() !== false;
     }
 }
