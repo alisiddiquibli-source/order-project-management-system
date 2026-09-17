@@ -165,8 +165,55 @@ plan to "prettify later."
   governs the file once someone has the link) — documented as a trade-off
   in `docs/ARCHITECTURE.md` §4.3.1, not silently accepted.
 
+## Backend codebase map
+
+- `src/Auth/` — `Jwt` (HS256 wrapper), `Authenticator` (login/tokens,
+  `requireAuth()`/`requireRole()`), `Scope` (builds the authorization
+  WHERE-clause per role — every list/get query for a project or order
+  goes through this, never a bare `WHERE id = ?`).
+- `src/Models/` — one repository per table cluster
+  (`ProjectRepository`, `OrderRepository`, `OrderStageRepository`, ...).
+  `findByIdForUser()`-style methods return `null` for both "doesn't
+  exist" and "not authorized" — routes turn that into a 404, never a 403,
+  so existence is never leaked.
+- `src/Domain/` — business-rule logic that isn't simple CRUD, starting
+  with `StageCompletionEvaluator` (the §3.1/§3.2 gate for marking a stage
+  `completed`). New cross-cutting rules belong here, not scattered across
+  route handlers.
+- `src/Http/` — framework bits (`Router`, `Request`, `Response`) plus
+  `OrderAccess`, a shared "load this order/stage or 404" helper used by
+  every order-scoped route.
+- `src/routes/*.php` — route registration, split by domain
+  (`health_and_auth.php`, `projects.php`, `orders.php`, ...), required
+  from `src/routes.php`. Keep splitting further before any one file gets
+  unwieldy — that's already why this isn't one big `routes.php`.
+
+## Known PHP/PDO gotcha — hit twice while building this, watch for it
+
+`Database::connection()` deliberately sets
+`PDO::ATTR_EMULATE_PREPARES => false` (real prepared statements, not
+PHP-side emulation — safer, and how production should run). The cost:
+**MySQL's native prepared statements reject reusing the same named
+placeholder twice in one query** — `WHERE a = :x OR b = :x` throws
+`SQLSTATE[HY093]: Invalid parameter number` at execute time, not at
+prepare time, so it's easy to miss until it's actually run. Bind two
+differently-named placeholders to the same value instead
+(`:x_a`/`:x_b`). This bit both `Bli\Auth\Scope` (the PC scope filter) and
+`OrderStageRepository::updatePlannedDates` (writing the same value to a
+column and its `original_*` counterpart) during Phase 1 — both fixed, but
+the next dynamic query built by hand should be tested against a real
+`mysqld`, not just read back, precisely because this class of bug is
+invisible until executed.
+
 ## Conventions
 
 - Commit messages: imperative, one line, no AI attribution beyond what the
   harness appends automatically.
 - Keep `docs/ROADMAP.md` checkboxes current as phases complete.
+- Stage lookups always use the pipeline stage number (`stages.id`, 1–12),
+  never `order_stages.id` (a global auto-increment, meaningless across
+  orders) — `OrderStageRepository::find()` and every route path
+  (`/orders/{id}/stages/{stageId}`) key on the former. A second bug from
+  mixing these up only surfaced when testing against a *second* order —
+  the first order's coincidental 1:1 id mapping masked it. Test with more
+  than one record.
