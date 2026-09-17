@@ -477,6 +477,15 @@ entry) **and** the configurable thresholds referenced throughout this doc:
 the 3-day early-warning window, the 7-day blocker escalation, SLA business
 hours, and the 5-business-day auto-close window.
 
+**Internal logins require a Business Links International email**
+(`@businesslinks-pk.com`) — every internal role (Company Owner, Sales
+Manager, Project Coordinator, Import Manager, Installation & Service
+Engineer). Supplier and customer logins use their own company's email, so
+they're exempt. Enforced as a database `CHECK` constraint on `users`
+(§9), not only in the account-creation API — a login can't end up in the
+system with the wrong kind of email regardless of which code path created
+it.
+
 ### 7.2 Staff absence & reassignment
 
 ```

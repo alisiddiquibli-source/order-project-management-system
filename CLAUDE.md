@@ -97,6 +97,10 @@ plan to "prettify later."
 - Every request is authorized server-side against the requester's actual
   scope (project/order assignment, `scope_project_id`, or `supplier_id`)
   — never a client-supplied id alone.
+- Every internal-role login must use a `@businesslinks-pk.com` email —
+  enforced as a DB `CHECK` constraint on `users`, not only app-level
+  validation. Supplier/customer logins are exempt (their own company's
+  email).
 - `documents.visibility`/`shared_with_supplier_id` and `comments.channel`/
   `shared_with_supplier_id` are enforced on every read — a project with
   machines from multiple suppliers must never let one supplier see another

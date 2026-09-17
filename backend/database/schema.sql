@@ -34,6 +34,13 @@ CREATE TABLE users (
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_users_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    -- Internal-role logins must be a Business Links International address;
+    -- supplier/customer logins use their own company's email, so they're
+    -- excluded. Enforced here as the hard backstop, not just in the
+    -- account-creation API (defense in depth).
+    CONSTRAINT chk_users_internal_email_domain CHECK (
+        role IN ('supplier', 'customer') OR email LIKE '%@businesslinks-pk.com'
+    ),
     INDEX idx_users_role (role),
     INDEX idx_users_scope_project (scope_project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
