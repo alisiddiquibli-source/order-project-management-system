@@ -181,7 +181,11 @@ plan to "prettify later."
   append-only `_updates` history child), `NotificationRepository` (writes
   the `notifications` row and fires the best-effort email alongside it —
   every notification, cron- or comment-triggered, goes through this, never
-  a raw `INSERT INTO notifications`).
+  a raw `INSERT INTO notifications`), `AmcContractRepository` (+ its AMC
+  visits), `ServiceTicketRepository` (`advanceStatus()` only ever walks a
+  ticket open -> in_progress -> resolved; closing is `confirmClosure()`
+  — the customer's own confirmation — or the SLA cron's `autoClose()`,
+  never a status an Engineer can set directly).
   `findByIdForUser()`-style methods return `null` for both "doesn't
   exist" and "not authorized" — routes turn that into a 404, never a 403,
   so existence is never leaked. `DocumentRepository`/`CommentRepository`
@@ -192,8 +196,11 @@ plan to "prettify later."
   `StageCompletionEvaluator` (the §3.1/§3.2 gate for marking a stage
   `completed`), `AcceptanceRules` (which acceptance type/target table a
   stage takes, and which role records FAT vs SAT), `DeadlineScanner` (the
-  daily cron's actual logic — see below). New cross-cutting rules belong
-  here, not scattered across route handlers.
+  daily cron's actual logic — see below), `BusinessHours` (SLA elapsed-time
+  math in actual business hours/days, not calendar time — configurable
+  window via `BUSINESS_HOURS_START`/`_END`/`BUSINESS_DAYS`), `TicketSlaScanner`
+  (the hourly ticket-SLA cron's logic, using `BusinessHours`). New
+  cross-cutting rules belong here, not scattered across route handlers.
 - `src/Http/` — framework bits (`Router`, `Request` — including
   multipart/`$_FILES` support for document uploads, `Response`) plus
   `OrderAccess`, a shared "load this order/stage or 404" helper (including
@@ -201,14 +208,17 @@ plan to "prettify later."
   `/api/fat-sat/{id}/result` that aren't nested under `/orders/{id}/...`).
 - `src/routes/*.php` — route registration, split by domain
   (`health_and_auth.php`, `projects.php`, `orders.php`, `evidence.php`,
-  `comments.php`, `logistics.php`), required from `src/routes.php`. Keep
-  splitting further before any one file gets unwieldy — that's already
-  why this isn't one big `routes.php`.
+  `comments.php`, `logistics.php`, `service.php` — AMC + service tickets),
+  required from `src/routes.php`. Keep splitting further before any one
+  file gets unwieldy — that's already why this isn't one big `routes.php`.
 - `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
   logic lives in `src/Domain/DeadlineScanner.php` so it's testable
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
   safe to re-run same-day without duplicate notifications (dedupes on
   `(user_id, order_id, type, DATE(created_at))`).
+- `cron/check_ticket_sla.php` — same pattern, but **hourly** (a daily scan
+  can't catch an hour-level SLA breach in time) and backed by
+  `src/Domain/TicketSlaScanner.php`.
 - `src/Notifications/Mailer.php` — thin PHPMailer/SMTP wrapper, called
   only from `NotificationRepository`. Best-effort by design: catches its
   own exceptions and logs to `error_log`, never throws — a mail-server

@@ -131,6 +131,10 @@ final class OrderStageRepository
             'user_id' => $actorId,
         ]);
 
+        if ($newStatus === 'completed') {
+            OrderRepository::maybeStartWarranty($orderId, $stageId);
+        }
+
         return ['ok' => true, 'stage' => self::find($orderId, (int) $stage['stage_id'])];
     }
 

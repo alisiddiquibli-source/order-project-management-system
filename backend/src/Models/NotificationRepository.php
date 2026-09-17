@@ -159,6 +159,9 @@ final class NotificationRepository
             'stage_overdue' => 'BLI system: a stage is overdue',
             'blocker_escalation' => 'BLI system: a blocker needs attention',
             'new_comment' => 'BLI system: new comment',
+            'ticket_opened' => 'BLI system: new service ticket',
+            'ticket_response_overdue' => 'BLI system: service ticket response SLA breached',
+            'ticket_resolution_overdue' => 'BLI system: service ticket resolution SLA breached',
             default => 'BLI system notification',
         };
     }

@@ -217,4 +217,40 @@ final class OrderRepository
 
         return $stmt->fetch() !== false;
     }
+
+    /**
+     * The stage each `warranty_start_trigger` value maps to (§5) — the
+     * pipeline stage number whose completion starts the warranty clock.
+     */
+    private const WARRANTY_TRIGGER_STAGE = [
+        'shipment' => 6,
+        'installation' => 9,
+        'sat' => 10,
+        'handover' => 12,
+    ];
+
+    /**
+     * Called after a stage completes (docs/ARCHITECTURE.md §5): if this
+     * order's chosen trigger stage is the one that just completed and
+     * warranty hasn't already started, stamps `warranty_start_date`.
+     * `warranty_end_date` is deliberately left for the PC/Sales Manager to
+     * set from the actual contract terms — there's no fixed system-wide
+     * warranty length to derive it from.
+     */
+    public static function maybeStartWarranty(int $orderId, int $completedStageId): void
+    {
+        $order = self::findByIdUnscoped($orderId);
+        if ($order === null || $order['warranty_start_date'] !== null) {
+            return;
+        }
+
+        $triggerStage = self::WARRANTY_TRIGGER_STAGE[$order['warranty_start_trigger']] ?? null;
+        if ($triggerStage !== $completedStageId) {
+            return;
+        }
+
+        Database::connection()
+            ->prepare('UPDATE orders SET warranty_start_date = CURDATE() WHERE id = :id')
+            ->execute(['id' => $orderId]);
+    }
 }
