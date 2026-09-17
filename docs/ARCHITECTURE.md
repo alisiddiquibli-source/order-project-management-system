@@ -161,7 +161,7 @@ approves one; a PC can request but not self-approve.
 | 8 Delivery | `customer_import_tracking` (stage 8 row) `latest_status = delivered`, or a delivery document |
 | 9 Installation | `engineer_reports` (type installation) `completion_status = complete`, no unresolved `outstanding_issues` |
 | 10 SAT | `result = pass` or `conditional_pass`, **plus a valid customer acceptance** (§3.4 — Sales Manager alone is not sufficient here) |
-| 11 Training | `training_records` attendance **and** a `training_ack` acceptance |
+| 11 Training | `training_records` attendance **and** a `training_ack` acceptance, **plus a valid customer acceptance** (same bar as SAT/Handover — training is also signed off with the customer present) |
 | 12 Handover | `engineer_reports` (type handover_readiness) `complete`, handover certificate uploaded, **plus a valid customer acceptance** |
 
 ### 3.3 FAT/SAT outcomes, severity, and retesting
@@ -212,10 +212,10 @@ v3, and the fix distinguishes two stages by risk:
   Manager or the customer** may record it, and either one sets
   `constitutes_customer_acceptance` appropriately — no extra evidence
   needed, since it's not yet a customer-facing sign-off.
-- **SAT and Handover** — these happen at the customer's site, the customer
-  is present, and this is exactly the sign-off this system exists to make
-  unambiguous. **`constitutes_customer_acceptance` must be true before the
-  stage can complete.** That's satisfied by:
+- **SAT, Training, and Handover** — these happen at the customer's site,
+  the customer is present, and this is exactly the sign-off this system
+  exists to make unambiguous. **`constitutes_customer_acceptance` must be
+  true before the stage can complete.** That's satisfied by:
   - the customer's own login recording the acceptance directly, or
   - a Sales Manager recording it **with `customer_authorization_evidence_document_id`
     set** — a reference to something showing the customer actually agreed

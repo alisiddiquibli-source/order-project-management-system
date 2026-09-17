@@ -12,6 +12,8 @@ final class Request
     public readonly array $query;
     /** @var array<string, mixed> */
     public readonly array $body;
+    /** @var array<string, array<string, mixed>> $_FILES-shaped, one entry per uploaded field */
+    public readonly array $files;
     /** @var array<string, string> */
     public readonly array $headers;
 
@@ -27,9 +29,18 @@ final class Request
 
         $this->query = $_GET;
 
-        $raw = file_get_contents('php://input') ?: '';
-        $decoded = json_decode($raw, true);
-        $this->body = is_array($decoded) ? $decoded : [];
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (str_starts_with($contentType, 'multipart/form-data')) {
+            // PHP already parses multipart bodies into $_POST/$_FILES —
+            // php://input is not reliably readable for these.
+            $this->body = $_POST;
+            $this->files = $_FILES;
+        } else {
+            $raw = file_get_contents('php://input') ?: '';
+            $decoded = json_decode($raw, true);
+            $this->body = is_array($decoded) ? $decoded : [];
+            $this->files = [];
+        }
 
         $headers = [];
         foreach ($_SERVER as $key => $value) {

@@ -9,6 +9,7 @@ use Bli\Http\Response;
 use Bli\Models\OrderRepository;
 use Bli\Models\OrderStageRepository;
 use Bli\Models\ProjectRepository;
+use Bli\Models\StageExceptionRepository;
 
 /** @var \Bli\Http\Router $router */
 
@@ -204,4 +205,35 @@ $router->post('/api/orders/{id}/stages/{stageId}/block', function (Request $requ
     );
 
     Response::json($result['stage']);
+});
+
+$router->post('/api/orders/{id}/stages/{stageId}/exceptions', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    // Only a Sales Manager or Owner approves one — a PC can request via a
+    // comment but never self-approve skipping a hard prerequisite (§3.1).
+    Authenticator::requireRole($request, ['sales_manager', 'company_owner']);
+
+    $orderId = (int) $params['id'];
+    $stageId = (int) $params['stageId'];
+    $stage = OrderAccess::requireVisibleStage($orderId, $stageId, $claims);
+
+    $body = $request->body;
+    $prerequisiteStageId = isset($body['prerequisite_stage_id']) ? (int) $body['prerequisite_stage_id'] : null;
+    $appliesTo = (string) ($body['applies_to'] ?? '');
+    $reason = (string) ($body['reason'] ?? '');
+
+    if ($prerequisiteStageId === null || $reason === ''
+        || !in_array($appliesTo, ['open_minor_items', 'procedural_delay'], true)) {
+        Response::error('prerequisite_stage_id, reason, and applies_to (open_minor_items|procedural_delay) are required.', 422);
+    }
+
+    $exception = StageExceptionRepository::create(
+        (int) $stage['id'],
+        $prerequisiteStageId,
+        $appliesTo,
+        $reason,
+        (int) $claims['sub'],
+    );
+
+    Response::json($exception, 201);
 });

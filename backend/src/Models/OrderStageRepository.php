@@ -26,6 +26,23 @@ final class OrderStageRepository
     }
 
     /**
+     * Raw lookup by the order_stages primary key — for resolving a flat
+     * evidence-resource route (e.g. /api/fat-sat/{id}/result) back to its
+     * order, so OrderAccess can authorize it. Never call this with a
+     * client-supplied id and treat the result as authorized on its own.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function findByPk(int $orderStageId): ?array
+    {
+        $stmt = Database::connection()->prepare('SELECT * FROM order_stages WHERE id = :id');
+        $stmt->execute(['id' => $orderStageId]);
+        $stage = $stmt->fetch();
+
+        return $stage === false ? null : $stage;
+    }
+
+    /**
      * Looks up by the pipeline stage number (1-12, matching `stages.id` /
      * `stages.sequence`) scoped to one order — NOT `order_stages.id`, which
      * is a global auto-increment shared across every order and would make

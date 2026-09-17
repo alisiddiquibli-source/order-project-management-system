@@ -1,0 +1,1 @@
+# Local document storage (outside public web root — never served as a static file, only through the authenticated /api/documents/{id}/file endpoint)

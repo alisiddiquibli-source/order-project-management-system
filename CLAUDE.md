@@ -107,7 +107,7 @@ plan to "prettify later."
   supplier's project-level shared item.
 - PC is the only writer of `order_stages.status`. The Engineer writes
   stage 9–12 evidence tables directly but never the status field itself.
-- **SAT and Handover require genuine customer acceptance to complete** —
+- **SAT, Training, and Handover require genuine customer acceptance to complete** —
   `acceptances.constitutes_customer_acceptance` must be true. A customer's
   own login satisfies this directly; a Sales Manager can only satisfy it
   by attaching `customer_authorization_evidence_document_id` (proof the
@@ -171,22 +171,45 @@ plan to "prettify later."
   `requireAuth()`/`requireRole()`), `Scope` (builds the authorization
   WHERE-clause per role — every list/get query for a project or order
   goes through this, never a bare `WHERE id = ?`).
-- `src/Models/` — one repository per table cluster
-  (`ProjectRepository`, `OrderRepository`, `OrderStageRepository`, ...).
+- `src/Models/` — one repository per table cluster: `ProjectRepository`,
+  `OrderRepository`, `OrderStageRepository`, `DocumentRepository`,
+  `CommentRepository`, `RequirementRepository`,
+  `ManufacturingMilestoneRepository`, `FatSatRepository` (+ punch list),
+  `EngineerReportRepository`, `TrainingRecordRepository`,
+  `AcceptanceRepository`, `StageExceptionRepository`.
   `findByIdForUser()`-style methods return `null` for both "doesn't
   exist" and "not authorized" — routes turn that into a 404, never a 403,
-  so existence is never leaked.
-- `src/Domain/` — business-rule logic that isn't simple CRUD, starting
-  with `StageCompletionEvaluator` (the §3.1/§3.2 gate for marking a stage
-  `completed`). New cross-cutting rules belong here, not scattered across
-  route handlers.
-- `src/Http/` — framework bits (`Router`, `Request`, `Response`) plus
-  `OrderAccess`, a shared "load this order/stage or 404" helper used by
-  every order-scoped route.
+  so existence is never leaked. `DocumentRepository`/`CommentRepository`
+  additionally filter by `visibility`/`channel` per role (see
+  `visibilityFilter()`/`channelFilter()`), separate from the order-level
+  scope check.
+- `src/Domain/` — business-rule logic that isn't simple CRUD:
+  `StageCompletionEvaluator` (the §3.1/§3.2 gate for marking a stage
+  `completed`), `AcceptanceRules` (which acceptance type/target table a
+  stage takes, and which role records FAT vs SAT), `DeadlineScanner` (the
+  daily cron's actual logic — see below). New cross-cutting rules belong
+  here, not scattered across route handlers.
+- `src/Http/` — framework bits (`Router`, `Request` — including
+  multipart/`$_FILES` support for document uploads, `Response`) plus
+  `OrderAccess`, a shared "load this order/stage or 404" helper (including
+  `requireVisibleStageByPk()` for flat evidence routes like
+  `/api/fat-sat/{id}/result` that aren't nested under `/orders/{id}/...`).
 - `src/routes/*.php` — route registration, split by domain
-  (`health_and_auth.php`, `projects.php`, `orders.php`, ...), required
-  from `src/routes.php`. Keep splitting further before any one file gets
-  unwieldy — that's already why this isn't one big `routes.php`.
+  (`health_and_auth.php`, `projects.php`, `orders.php`, `evidence.php`,
+  `comments.php`), required from `src/routes.php`. Keep splitting further
+  before any one file gets unwieldy — that's already why this isn't one
+  big `routes.php`.
+- `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
+  logic lives in `src/Domain/DeadlineScanner.php` so it's testable
+  without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
+  safe to re-run same-day without duplicate notifications (dedupes on
+  `(user_id, order_id, type, DATE(created_at))`).
+- `storage/documents/` — local file storage for uploaded PDFs, outside
+  `public/`, never served as a static file — only through the
+  authenticated `/api/documents/{id}/file` endpoint. Actual files are
+  gitignored (`.gitkeep` only); `DocumentRepository::storeUploadedFile()`
+  whitelists extensions and never trusts the client-supplied filename for
+  the stored path.
 
 ## Known PHP/PDO gotcha — hit twice while building this, watch for it
 

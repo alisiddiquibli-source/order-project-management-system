@@ -43,4 +43,24 @@ final class OrderAccess
 
         return $stage;
     }
+
+    /**
+     * Resolves a flat evidence-resource route (e.g. /api/fat-sat/{id}/result,
+     * keyed by an order_stages primary key rather than an order id in the
+     * path) back to its order_stage, authorizing via the order it belongs to.
+     *
+     * @param array<string, mixed> $claims
+     * @return array<string, mixed>
+     */
+    public static function requireVisibleStageByPk(int $orderStageId, array $claims): array
+    {
+        $stage = OrderStageRepository::findByPk($orderStageId);
+        if ($stage === null) {
+            Response::error('Stage not found.', 404);
+        }
+
+        self::requireVisibleOrder((int) $stage['order_id'], $claims);
+
+        return $stage;
+    }
 }

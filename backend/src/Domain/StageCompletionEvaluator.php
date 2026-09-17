@@ -303,14 +303,30 @@ final class StageCompletionEvaluator
             return ['ok' => false, 'reason' => 'No training record with attendees on file.'];
         }
 
-        return self::check(
-            $db,
-            "SELECT 1 FROM acceptances WHERE order_stage_id = :order_stage_id
-             AND target_record_type = 'training_record' AND target_record_id = :record_id
-             AND type = 'training_ack'",
-            ['order_stage_id' => $orderStageId, 'record_id' => $record['id']],
-            'Training needs a training_ack acceptance tied to this record.'
+        $stmt = $db->prepare(
+            "SELECT constitutes_customer_acceptance FROM acceptances
+             WHERE order_stage_id = :order_stage_id AND target_record_type = 'training_record'
+               AND target_record_id = :record_id AND type = 'training_ack'
+             ORDER BY id DESC LIMIT 1"
         );
+        $stmt->execute(['order_stage_id' => $orderStageId, 'record_id' => $record['id']]);
+        $acceptance = $stmt->fetch();
+
+        if ($acceptance === false) {
+            return ['ok' => false, 'reason' => 'Training needs a training_ack acceptance tied to this record.'];
+        }
+
+        // Same genuine-customer-acceptance bar as SAT/Handover — training
+        // is signed off with the customer present, same as those two.
+        if (!(bool) $acceptance['constitutes_customer_acceptance']) {
+            return [
+                'ok' => false,
+                'reason' => 'Training needs genuine customer acceptance — a Sales Manager acceptance without '
+                    . 'customer_authorization_evidence_document_id does not satisfy this.',
+            ];
+        }
+
+        return ['ok' => true, 'reason' => null];
     }
 
     /**

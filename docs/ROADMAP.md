@@ -3,24 +3,32 @@
 Phased so each phase is reviewable and usable on its own before the next
 begins.
 
-- [ ] **Phase 1 — Core internal system**
-  Auth for internal roles. Projects + orders (one machine each, with
-  on_hold/cancelled lifecycle) + requirements + the 12-stage pipeline:
-  manually-set target dates (original + current + `commitment_changes`
-  with approval rule), stage dependency/exception rules (severity-aware,
-  never overriding a fail), manufacturing milestones (non-empty
-  requirement), `engineer_reports`/`fat_sat_records`/`training_records`
-  evidence tables, FAT/SAT photo & video capture via Google Drive
-  alongside locally-stored PDF reports (§4.3.1), the `acceptances` model
-  (with the customer-acceptance requirement for SAT/handover), blocked-stage
-  logging + escalation, document upload, channel-scoped comments with
-  per-supplier project-level sharing, the daily deadline/blocker cron,
-  Sales Manager and Company Owner dashboards. This is the biggest phase —
-  the whole operational core.
-- [ ] **Phase 2 — External logins**
+- [x] **Phase 1 — Core internal system (backend)**
+  Done: auth for internal roles (+ the `@businesslinks-pk.com` domain
+  constraint); projects + orders (one machine each, with on_hold/cancelled
+  lifecycle); requirements; the 12-stage pipeline with manually-set target
+  dates (original + current + `commitment_changes` with the approval
+  rule); stage dependency/exception rules (severity-aware, never
+  overriding a fail, `stage_exceptions` creation endpoint); manufacturing
+  milestones (non-empty requirement); `engineer_reports`/`fat_sat_records`
+  (+ punch lists)/`training_records` evidence endpoints; document upload
+  (real local file storage + Google Drive file-id path for FAT/SAT
+  photo/video, §4.3.1); the `acceptances` model (customer-acceptance
+  requirement for SAT/Training/Handover, tested against a real retest-
+  supersede case); blocked-stage logging; channel-scoped comments with
+  per-supplier project-level sharing; the daily deadline/blocker cron
+  (`cron/check_stage_deadlines.php`, idempotent, tested against a live
+  overdue/at-risk/stale-blocker scenario).
+  Not done: Sales Manager and Company Owner dashboard/summary endpoints —
+  the underlying data and authorization are all in place, what's missing
+  is the aggregation views themselves, which will land as part of the
+  frontend work (tracked separately, not one of these numbered phases).
+- [x] **Phase 2 — External logins**
   One customer login per project (`scope_project_id`) and one supplier
   login per supplier company (`supplier_id`) — comment-only, channel-
-  scoped, customer acceptance authority wired in.
+  scoped, customer acceptance authority wired in. Built and tested
+  together with Phase 1 rather than as a separate pass — the scope model
+  needed both kinds of login exercised together to trust it.
 - [ ] **Phase 3 — Shipment & customs detail + notifications**
   Shipment tracking with `actual_dispatch_date` gating stage 6 completion,
   per-stage `customer_import_tracking` (+ update history) for stages 7–8,
@@ -55,4 +63,19 @@ stage 9–12 evidence with PC recording completion; Sales Manager is
 project-level custodian). See `docs/ARCHITECTURE.md` (v4) for the current
 design — the sharpest fix in this round was requiring genuine customer
 acceptance (not a Sales Manager alone) to complete SAT and Handover.
-Not yet started: Phase 1.
+
+Phases 1–2 (backend) — complete and verified end-to-end against a real
+MySQL database and running server, not just read back: a full order
+walked through all 12 stages via real API calls (not direct DB
+inserts) with every completion gate actually enforced, a FAT retest
+correctly voided the superseded record's acceptance, a multi-supplier
+project correctly isolated one supplier's comments from another's, and
+the deadline cron correctly flagged at-risk/overdue/stale-blocker cases
+and stayed idempotent across repeated runs. Three real bugs were found
+and fixed in the process (see `CLAUDE.md`'s "Known PHP/PDO gotcha" and
+stage-lookup notes) — caught precisely because testing went beyond the
+first happy path.
+
+Not yet started: Phase 3 (shipment/customs detail endpoints — currently
+only reachable by direct DB write, no API), Phase 4 (post-handover
+service), Phase 5 (AI layer), the frontend, and Phase 6 (deployment).
