@@ -29,10 +29,18 @@ begins.
   scoped, customer acceptance authority wired in. Built and tested
   together with Phase 1 rather than as a separate pass — the scope model
   needed both kinds of login exercised together to trust it.
-- [ ] **Phase 3 — Shipment & customs detail + notifications**
+- [x] **Phase 3a — Shipment & customs detail (API)**
   Shipment tracking with `actual_dispatch_date` gating stage 6 completion,
-  per-stage `customer_import_tracking` (+ update history) for stages 7–8,
-  email delivery of Phase 1 alerts, comment notifications.
+  per-stage `customer_import_tracking` (+ append-only update history) for
+  stages 7–8. Tested end-to-end: a booking alone couldn't complete stage
+  6, dispatch + the stage 5 prerequisite together could; stage 7's
+  history preserved both a `documents_submitted` and a later `cleared`
+  entry rather than overwriting; a second import-tracking record on an
+  already-tracked stage was correctly rejected; Sales Manager correctly
+  blocked from creating a shipment (PC-only).
+- [ ] **Phase 3b — Notifications**
+  Email delivery of the Phase 1 deadline/blocker alerts, comment
+  notifications to relevant roles.
 - [ ] **Phase 4 — Post-handover service module**
   `amc_contracts`/`amc_visits`, `service_tickets` with resolved-vs-closed,
   business-hours SLA on the **hourly** `check_ticket_sla.php` cron,
@@ -96,6 +104,9 @@ Project Coordinator dashboards work end-to-end against the live backend,
 verified in an actual Chromium browser (screenshots taken, not just
 "it compiles"). Other five roles' dashboards are the next frontend work.
 
-Not yet started: Phase 3 (shipment/customs detail endpoints — currently
-only reachable by direct DB write, no API), Phase 4 (post-handover
+Phase 3a (shipment/customs API) — complete; every core-pipeline stage
+(1–12) is now reachable through a real, tested API endpoint, none left
+requiring a direct DB write to exercise.
+
+Not yet started: Phase 3b (notifications), Phase 4 (post-handover
 service), Phase 5 (AI layer), and Phase 6 (deployment).

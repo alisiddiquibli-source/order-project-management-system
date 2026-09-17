@@ -176,7 +176,9 @@ plan to "prettify later."
   `CommentRepository`, `RequirementRepository`,
   `ManufacturingMilestoneRepository`, `FatSatRepository` (+ punch list),
   `EngineerReportRepository`, `TrainingRecordRepository`,
-  `AcceptanceRepository`, `StageExceptionRepository`.
+  `AcceptanceRepository`, `StageExceptionRepository`,
+  `ShipmentRepository`, `CustomerImportTrackingRepository` (+ its
+  append-only `_updates` history child).
   `findByIdForUser()`-style methods return `null` for both "doesn't
   exist" and "not authorized" — routes turn that into a 404, never a 403,
   so existence is never leaked. `DocumentRepository`/`CommentRepository`
@@ -196,9 +198,9 @@ plan to "prettify later."
   `/api/fat-sat/{id}/result` that aren't nested under `/orders/{id}/...`).
 - `src/routes/*.php` — route registration, split by domain
   (`health_and_auth.php`, `projects.php`, `orders.php`, `evidence.php`,
-  `comments.php`), required from `src/routes.php`. Keep splitting further
-  before any one file gets unwieldy — that's already why this isn't one
-  big `routes.php`.
+  `comments.php`, `logistics.php`), required from `src/routes.php`. Keep
+  splitting further before any one file gets unwieldy — that's already
+  why this isn't one big `routes.php`.
 - `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
   logic lives in `src/Domain/DeadlineScanner.php` so it's testable
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
