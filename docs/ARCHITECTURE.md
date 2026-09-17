@@ -128,11 +128,11 @@ manually `blocked`):
   `completed`, the job sets `status = 'delayed'` and creates an overdue
   notification.
 
-Both notification types go to the order's assigned **Project Coordinator**
-and to **every Company Owner**. The same check runs against
-`orders.target_handover_date` at the whole-order level, for the Company
-Owner portfolio dashboard. `amc_schedules.next_due_date` gets the same
-early-warning treatment (§4).
+Both notification types go to the order's assigned **Project Coordinator**,
+its assigned **Sales Manager**, and to **every Company Owner**. The same
+check runs against `orders.target_handover_date` at the whole-order level,
+feeding both the Sales Manager's and the Company Owner's dashboards.
+`amc_schedules.next_due_date` gets the same early-warning treatment (§4).
 
 ## 4. Post-handover service module
 
@@ -157,12 +157,28 @@ portfolio.
 | Role | Assigned how | Scope |
 |------|--------------|-------|
 | **Company Owner** | One login per person; role-based, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
-| **Project Coordinator** | One login per person; assigned to N orders as `project_coordinator_id` | Full read/write on every order they're assigned to: creates the order, updates all 12 stages + documents + shipments. The operational hub. BLI has multiple PCs — each order has exactly one, each PC can hold many orders. |
-| **Sales Manager** | One login per person; assigned to N orders as `sales_manager_id` | Read + comment on every order they're assigned to; sees contract/customer info; notified on milestones and delays for those customers. BLI has multiple Sales Managers, same many-orders-per-person model. |
-| **Import Manager** | One login per person; global advisory role (not tied to specific orders) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the assigned Project Coordinator, only when the customer's import team needs input. No stage-status edit rights. |
-| **Installation & Service Engineer** | One login per person; assigned to N orders as `installation_engineer_id` | Full read/write on stages 9–12 for every order they're assigned to, plus all service tickets/AMC schedules for those orders after handover. |
+| **Sales Manager** | One login per person; assigned to N orders as `sales_manager_id` | **Primary accountable custodian of the order.** Full read visibility into everything on their assigned order(s) — every stage, milestone, FAT/SAT result and punch list, shipment, document, and service ticket — plus comment/direct-instruction rights to the Project Coordinator. Gets every deadline/at-risk alert and AI advisory for their order(s). Doesn't enter stage data directly; directs the PC, who remains the sole data-entry point. BLI has multiple Sales Managers, each with their own set of orders. |
+| **Project Coordinator** | One login per person; assigned to N orders as `project_coordinator_id` | Full read/write on every order they're assigned to: creates the order, updates all 12 stages + documents + shipments. The operational executor, accountable to that order's Sales Manager. BLI has multiple PCs — each order has exactly one, each PC can hold many orders. |
+| **Import Manager** | One login per person; global advisory role (not tied to specific orders) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the Project Coordinator and Sales Manager, only when the customer's import team needs input. No stage-status edit rights. |
+| **Installation & Service Engineer** | One login per person; assigned to N orders as `installation_engineer_id` | Full read/write on stages 9–12 for every order they're assigned to, plus all service tickets/AMC schedules for those orders after handover. Accountable to that order's Sales Manager. |
 | **Supplier** (external) | One login per supplier company | Observer + comment only, across **every** order linked to that supplier (`orders.supplier_id`). Sees stages/documents relevant to their side (3–6: manufacturing, testing material, FAT, shipment coordination) on each of those orders, not commercial terms with the customer. |
 | **Customer** (external) | One login per project | Observer + comment only, on the **one** order they're linked to (`scope_order_id`). Sees overall progress + shared documents, can raise a service ticket post-handover, and confirms SAT sign-off as a specific comment/action. |
+
+**Accountability model:** per order, the **Sales Manager is the responsible
+owner of the outcome** — the Project Coordinator, Import Manager (when
+advising), and Installation & Service Engineer are all effectively
+reporting to that order's Sales Manager, even though they sit in different
+functional teams administratively. This is an accountability/visibility
+relationship, not a data-entry one: it doesn't change who's allowed to
+write what (the rules below are unchanged) — it changes who the system
+proactively surfaces information, alerts, and AI-generated recommendations
+to, and who's expected to direct corrective action when something's off
+track.
+
+The **Sales Manager's dashboard** works like the Company Owner's portfolio
+view, but scoped to just their own assigned orders: a one-page status
+roll-up across all their projects, with full stage-level drill-down into
+any one of them.
 
 Every API request is authorized server-side against the requesting user's
 actual scope — never by trusting an order ID passed from the client alone:
@@ -257,18 +273,25 @@ AiAdvisorService
 ```
 
 Use cases:
-- **Status reports** — narrative summary of an order's progress on demand
-  (useful for Company Owners' portfolio view and Sales Manager customer updates).
-- **Risk advisory** — flag stages at risk (e.g., FAT readiness marked
-  complete but shipment not yet booked) — surfaced to Project Coordinator and
-  Import Manager. Complements, not replaces, the deterministic deadline
-  alerts in §3.4 — the cron job always fires on dates; the AI layer adds
-  judgment calls a date threshold can't (e.g., reading punch-list severity).
+- **Status reports** — narrative summary of an order's progress on demand.
+  Primary destination is the **Sales Manager's dashboard**, one per assigned
+  project; the Company Owner gets the same kind of summary rolled up across
+  the whole portfolio.
+- **Risk advisory** — flags stages at risk and recommends a specific next
+  action (e.g., "FAT readiness marked complete but shipment not yet booked —
+  confirm freight booking with supplier"), surfaced jointly to the **Sales
+  Manager** (the accountable decision-maker) and the **Project Coordinator**
+  (who executes it). This is the core of what the Sales Manager asked for:
+  the system, not just the PC, tells him what needs attention. Complements,
+  not replaces, the deterministic deadline alerts in §3.4 — the cron job
+  always fires on dates; the AI layer adds judgment calls a date threshold
+  can't (e.g., reading punch-list severity, spotting a stage that's
+  technically on-schedule but trending wrong).
 - **Follow-up drafting** — draft a follow-up comment/message to a
   supplier/customer based on current stage status.
 - **Monitoring digest** — scheduled (cron) scan across active orders and open
-  service tickets, emailing a daily digest to Company Owners and assigned
-  Coordinators.
+  service tickets, emailing a daily digest to Company Owners and, per order,
+  its Sales Manager and Project Coordinator.
 
 Rules:
 - API keys live server-side only (`.env`, outside the web root) — never sent

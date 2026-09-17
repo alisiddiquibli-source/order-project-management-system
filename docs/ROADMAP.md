@@ -4,13 +4,15 @@ Phased so each phase is reviewable and usable on its own before the next
 begins.
 
 - [ ] **Phase 1 — Core internal system**
-  Auth for internal roles (Company Owner, Project Coordinator, Sales
-  Manager, Import Manager, Installation & Service Engineer), orders +
+  Auth for internal roles (Company Owner, Sales Manager, Project
+  Coordinator, Import Manager, Installation & Service Engineer), orders +
   requirements + the 12-stage pipeline (entered/updated by the Project
   Coordinator) with manually-set target dates per stage, manufacturing
   milestone checklist, FAT/SAT result + punch list records, document
   upload, the daily deadline-check cron (auto-overdue + early warning,
-  §3.4), and the Company Owner portfolio dashboard.
+  §3.4) alerting the PC + Sales Manager + Company Owners, the Sales
+  Manager's per-project dashboard (their orders only), and the Company
+  Owner's portfolio dashboard (all orders).
 - [ ] **Phase 2 — External logins**
   One customer login per project (`scope_order_id`) and one supplier login
   per supplier company spanning all their projects (`supplier_id`) —

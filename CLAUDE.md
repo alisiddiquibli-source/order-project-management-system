@@ -9,17 +9,21 @@ track the supplier's own raw-material import — scope starts at manufacturing.
 Pakistan customs clearance and final delivery (stages 7–8) are executed by
 the **customer's own import team**, not BLI — BLI only coordinates.
 
-Internal roles: Company Owner (portfolio view), Project Coordinator (single
-point of data entry, owns every order assigned to them), Sales Manager
-(customer relationship, read + comment), Import Manager (global advisor,
-comment only, no edit rights — joins the Project Coordinator on stages 6–8
+Internal roles: Company Owner (portfolio view across all orders), **Sales
+Manager (the primary accountable custodian of each of their assigned
+orders** — full read visibility into everything on the order, directs the
+PC, receives every alert and AI advisory; doesn't enter data directly),
+Project Coordinator (the operational executor — single point of data entry,
+accountable to that order's Sales Manager), Import Manager (global advisor,
+comment only, no edit rights — joins the PC and Sales Manager on stages 6–8
 only when the customer's import team asks for help), Installation & Service
 Engineer (owns installation/SAT/training/handover + post-handover service
-for their assigned orders). BLI has multiple people per role (several PCs,
-several Sales Managers, etc.) — **one login per person**, and each login's
-access is every order that person is assigned to (`project_coordinator_id`
-/ `sales_manager_id` / `installation_engineer_id`), not role-wide (except
-Company Owner and Import Manager, who are role-wide by design).
+for their assigned orders, accountable to that order's Sales Manager). BLI
+has multiple people per role (several PCs, several Sales Managers, etc.) —
+**one login per person**, and each login's access is every order that
+person is assigned to (`project_coordinator_id` / `sales_manager_id` /
+`installation_engineer_id`), not role-wide (except Company Owner and Import
+Manager, who are role-wide by design).
 
 External: **one customer login per project** (`scope_order_id`), but **one
 supplier login per supplier company covering every project that company
@@ -57,7 +61,10 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
   enforce this server-side, not just in the UI.
 - The daily deadline-check job is the source of truth for `delayed` status
   and at-risk notifications (see `docs/ARCHITECTURE.md` §3.4) — don't
-  hand-roll a second overdue check elsewhere.
+  hand-roll a second overdue check elsewhere. Alerts go to the order's PC,
+  its Sales Manager, and every Company Owner — never just the PC.
+- AI risk-advisory output is surfaced to the Sales Manager and the PC
+  jointly (see `docs/ARCHITECTURE.md` §7) — it's not a PC-only tool.
 - AI provider keys (Claude/Gemini/ChatGPT) live server-side only, never sent
   to the frontend.
 - Uploaded documents are served through an authenticated endpoint, never as
