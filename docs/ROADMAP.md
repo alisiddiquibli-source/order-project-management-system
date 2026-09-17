@@ -6,7 +6,7 @@ begins.
 - [ ] **Phase 1 — Core internal system**
   Auth for internal roles (Company Owner, Project Coordinator, Sales
   Manager, Import Manager, Installation & Service Engineer), orders +
-  requirements + the 13-stage pipeline (entered/updated by the Project
+  requirements + the 12-stage pipeline (entered/updated by the Project
   Coordinator), document upload, Company Owner portfolio dashboard.
 - [ ] **Phase 2 — External project logins**
   One supplier login + one customer login per project — observer + comment

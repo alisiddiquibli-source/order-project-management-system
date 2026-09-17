@@ -1,10 +1,11 @@
 # Order & Project Lifecycle Management System (Business Links International)
 
 Tracks equipment/project orders from requirement capture through handover
-and ongoing post-handover service: ordering → import & manufacturing at
-supplier site → testing material supply → FAT → shipment coordination →
-import clearance in Pakistan → delivery → installation → SAT → training →
-handover → service/AMC.
+and ongoing post-handover service: ordering → machine manufacturing progress
+at supplier site → machine testing material coordination → machine FAT
+readiness → shipment coordination → import clearance in Pakistan → delivery
+→ installation → SAT → training → handover → service/AMC. BLI does not
+track the supplier's own raw-material import — scope starts at manufacturing.
 
 Internal roles: Company Owner (portfolio view), Project Coordinator (single
 point of data entry, owns every order assigned to them), Sales Manager

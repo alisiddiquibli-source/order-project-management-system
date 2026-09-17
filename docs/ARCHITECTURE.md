@@ -28,18 +28,20 @@ the Coordinator (see §4 for exactly who does what).
 |---|-------|---------------------------|-------------------------------|
 | 1 | Requirements captured | Sales Manager + customer | Project Coordinator |
 | 2 | Order placed (PO issued) | Project Coordinator | Project Coordinator |
-| 3 | Import of raw material/components (supplier side) | Supplier | Project Coordinator (advised by Import Manager) |
-| 4 | Processing & manufacturing (supplier site) | Supplier | Project Coordinator |
-| 5 | Testing material supplied | Project Coordinator / Supplier | Project Coordinator |
-| 6 | FAT (Factory Acceptance Test) | Supplier, witnessed remotely/on-site | Project Coordinator |
-| 7 | Shipment coordination | Project Coordinator (advised by Import Manager) | Project Coordinator |
-| 8 | Import clearance in Pakistan | Import Manager advises; clearing agent executes | Project Coordinator |
-| 9 | Delivery to customer | Project Coordinator | Project Coordinator |
-| 10 | Installation at customer site | Installation & Service Engineer | Project Coordinator |
-| 11 | SAT (Site Acceptance Test) | Installation & Service Engineer + customer | Project Coordinator |
-| 12 | Training | Installation & Service Engineer | Project Coordinator |
-| 13 | Handover | Project Coordinator + customer | Project Coordinator |
+| 3 | Machine manufacturing progress (supplier site) | Supplier | Project Coordinator |
+| 4 | Machine testing material coordination | Project Coordinator / Supplier | Project Coordinator |
+| 5 | Machine FAT readiness / FAT execution | Supplier, witnessed remotely/on-site | Project Coordinator |
+| 6 | Shipment coordination | Project Coordinator (advised by Import Manager) | Project Coordinator |
+| 7 | Import clearance in Pakistan | Import Manager advises; clearing agent executes | Project Coordinator |
+| 8 | Delivery to customer | Project Coordinator | Project Coordinator |
+| 9 | Installation at customer site | Installation & Service Engineer | Project Coordinator |
+| 10 | SAT (Site Acceptance Test) | Installation & Service Engineer + customer | Project Coordinator |
+| 11 | Training | Installation & Service Engineer | Project Coordinator |
+| 12 | Handover | Project Coordinator + customer | Project Coordinator |
 | — | **Post-handover service** (ongoing) | Installation & Service Engineer | Installation & Service Engineer |
+
+BLI does not track the supplier's own raw-material import/procurement —
+scope starts once the machine is in manufacturing at the supplier's site.
 
 Stage status: `not_started`, `in_progress`, `completed`, `delayed`, `blocked`.
 Stages are sequential by default but the model allows overlap — enforced by
@@ -47,8 +49,8 @@ planning, not hard-coded in the database.
 
 **Assumption to confirm:** Import Manager is a pure advisor with no data-entry
 duties anywhere — they see relevant orders and comment, but never change a
-stage's status. If in practice they should be able to mark import-specific
-stages complete themselves, tell me and I'll split stage 3/8 ownership out to
+stage's status. If in practice they should be able to mark shipment/customs
+stages complete themselves, tell me and I'll split stage 6/7 ownership out to
 them instead of the Coordinator.
 
 ## 3. Post-handover service module
@@ -74,11 +76,11 @@ portfolio.
 | Role | Assigned how | Scope |
 |------|--------------|-------|
 | **Company Owner** | By role, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
-| **Project Coordinator** | Assigned per order (1 per order) | Full read/write on their assigned order(s): creates the order, updates all 13 stages + documents + shipments. The operational hub. |
+| **Project Coordinator** | Assigned per order (1 per order) | Full read/write on their assigned order(s): creates the order, updates all 12 stages + documents + shipments. The operational hub. |
 | **Sales Manager** | Assigned per order (their customer relationship) | Read + comment on their assigned order(s); sees contract/customer info; notified on milestones and delays affecting that customer. |
-| **Import Manager** | Global advisory role (not per-order) | Read access to all orders; comment rights focused on import/customs-relevant stages (3, 7, 8). No stage-status edit rights. |
-| **Installation & Service Engineer** | Assigned per order | Full read/write on stages 10–13 for their assigned order(s), plus all service tickets/AMC schedules for those orders after handover. |
-| **Supplier** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees stages/documents relevant to their side (3–8), not commercial terms with the customer. |
+| **Import Manager** | Global advisory role (not per-order) | Read access to all orders; comment rights focused on shipment/customs-relevant stages (6, 7). No stage-status edit rights. |
+| **Installation & Service Engineer** | Assigned per order | Full read/write on stages 9–12 for their assigned order(s), plus all service tickets/AMC schedules for those orders after handover. |
+| **Supplier** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees stages/documents relevant to their side (3–6: manufacturing, testing material, FAT, shipment coordination), not commercial terms with the customer. |
 | **Customer** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees overall progress + shared documents, can raise a service ticket post-handover, and confirms SAT sign-off as a specific comment/action. |
 
 Every API request is authorized by `(user.role, user.assigned_order_ids or
@@ -160,8 +162,8 @@ AiAdvisorService
 Use cases:
 - **Status reports** — narrative summary of an order's progress on demand
   (useful for Company Owners' portfolio view and Sales Manager customer updates).
-- **Risk advisory** — flag stages at risk (e.g., FAT scheduled but testing
-  material not yet confirmed shipped) — surfaced to Project Coordinator and
+- **Risk advisory** — flag stages at risk (e.g., FAT readiness marked
+  complete but shipment not yet booked) — surfaced to Project Coordinator and
   Import Manager.
 - **Follow-up drafting** — draft a follow-up comment/message to a
   supplier/customer based on current stage status.

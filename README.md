@@ -1,13 +1,15 @@
 # Order & Project Lifecycle Management System
 
 A system to plan, execute and monitor equipment/project orders end-to-end:
-requirements → ordering → import & manufacturing at the supplier's site →
-testing material supply → FAT → shipment coordination → import clearance in
-Pakistan → delivery → installation → SAT → training → handover.
+requirements → ordering → machine manufacturing progress at the supplier's
+site → machine testing material coordination → machine FAT readiness →
+shipment coordination → import clearance in Pakistan → delivery →
+installation → SAT → training → handover → post-handover service/AMC.
 
-Built for internal team use, with limited external logins for **suppliers**
-(to update manufacturing/FAT progress) and **customers** (to view their own
-order's progress and sign off on SAT).
+Built for the internal team (Company Owner, Project Coordinator, Sales
+Manager, Import Manager, Installation & Service Engineer), with one
+observer-plus-comment login per project for the **supplier** and the
+**customer** on that project — no data entry, view + comment only.
 
 ## Structure
 
