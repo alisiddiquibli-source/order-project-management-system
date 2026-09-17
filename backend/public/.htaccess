@@ -1,0 +1,13 @@
+RewriteEngine On
+
+# Route everything through the front controller except real files (uploads
+# are served through an authenticated endpoint, never as static links —
+# see docs/ARCHITECTURE.md §11 — so this never needs to expose a real path).
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Never serve dotfiles (.env, etc.) even if placed under the web root by mistake.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

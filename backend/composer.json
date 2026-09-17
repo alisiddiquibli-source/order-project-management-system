@@ -1,0 +1,21 @@
+{
+    "name": "bli/order-project-management-system",
+    "description": "Order & Project Lifecycle Management System API (Business Links International)",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.1",
+        "ext-pdo": "*",
+        "ext-json": "*",
+        "vlucas/phpdotenv": "^5.6",
+        "firebase/php-jwt": "^6.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bli\\": "src/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}
