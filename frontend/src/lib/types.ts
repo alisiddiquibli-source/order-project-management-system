@@ -120,3 +120,114 @@ export interface AmcVisit {
   order_number?: string
   machine_name?: string
 }
+
+export interface Requirement {
+  id: number
+  order_id: number
+  description: string
+  document_ref: string | null
+  version: number
+  approved_by: number | null
+  approved_at: string | null
+  created_at: string
+}
+
+export type DocumentVisibility = 'internal' | 'supplier' | 'customer' | 'shared'
+
+export interface DocumentRecord {
+  id: number
+  project_id: number | null
+  order_id: number | null
+  order_stage_id: number | null
+  fat_sat_record_id: number | null
+  type: string
+  storage_type: 'local' | 'google_drive'
+  file_path: string
+  uploaded_by: number
+  visibility: DocumentVisibility
+  shared_with_supplier_id: number | null
+  created_at: string
+}
+
+export interface ManufacturingMilestone {
+  id: number
+  order_stage_id: number
+  name: string
+  sequence: number
+  planned_date: string | null
+  actual_date: string | null
+  status: 'pending' | 'done'
+  notes: string | null
+}
+
+export type FatSatType = 'FAT' | 'SAT'
+export type FatSatResult = 'pass' | 'fail' | 'conditional_pass'
+
+export interface FatSatRecord {
+  id: number
+  order_stage_id: number
+  type: FatSatType
+  scheduled_date: string | null
+  actual_date: string | null
+  result: FatSatResult | null
+  superseded_by: number | null
+  report_document_id: number | null
+  notes: string | null
+}
+
+export interface PunchListItem {
+  id: number
+  fat_sat_record_id: number
+  description: string
+  severity: 'critical' | 'minor'
+  assigned_to: number | null
+  target_resolution_date: string | null
+  raised_by: number
+  status: 'open' | 'resolved'
+  resolved_at: string | null
+  verified_by: number | null
+  verified_at: string | null
+  carries_past_handover: boolean
+}
+
+export type EngineerReportType = 'installation' | 'handover_readiness'
+
+export interface EngineerReport {
+  id: number
+  order_stage_id: number
+  type: EngineerReportType
+  completed_by: number
+  completion_status: 'complete' | 'incomplete'
+  outstanding_issues: string | null
+  report_document_id: number | null
+  notes: string | null
+  submitted_at: string
+}
+
+export interface TrainingRecord {
+  id: number
+  order_stage_id: number
+  scheduled_date: string | null
+  actual_date: string | null
+  attendees: string | null
+  materials_provided: string | null
+  report_document_id: number | null
+  notes: string | null
+}
+
+export type AcceptanceType = 'fat_conditional' | 'sat_result' | 'training_ack' | 'handover_confirmation'
+export type AcceptanceTargetTable = 'fat_sat_record' | 'training_record' | 'engineer_report'
+
+export interface Acceptance {
+  id: number
+  order_stage_id: number
+  target_record_type: AcceptanceTargetTable
+  target_record_id: number
+  type: AcceptanceType
+  accepted_by_type: 'customer' | 'sales_manager'
+  accepted_by_user_id: number
+  customer_authorization_evidence_document_id: number | null
+  constitutes_customer_acceptance: boolean
+  conditions_notes: string | null
+  accepted_at: string
+}

@@ -21,6 +21,14 @@ use Bli\Models\TrainingRecordRepository;
 // Requirements (stage 1)
 // ---------------------------------------------------------------------
 
+$router->get('/api/orders/{id}/requirements', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    OrderAccess::requireVisibleOrder($orderId, $claims);
+
+    Response::json(RequirementRepository::listForOrder($orderId));
+});
+
 $router->post('/api/orders/{id}/requirements', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
     Authenticator::requireRole($request, ['project_coordinator']);
@@ -142,6 +150,14 @@ $router->get('/api/documents/{id}/file', function (Request $request, array $para
 // Manufacturing milestones (stage 3)
 // ---------------------------------------------------------------------
 
+$router->get('/api/orders/{id}/stages/{stageId}/milestones', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stage = OrderAccess::requireVisibleStage($orderId, (int) $params['stageId'], $claims);
+
+    Response::json(ManufacturingMilestoneRepository::listForStage((int) $stage['id']));
+});
+
 $router->post('/api/orders/{id}/stages/{stageId}/milestones', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
     Authenticator::requireRole($request, ['project_coordinator']);
@@ -187,6 +203,14 @@ $router->patch('/api/milestones/{id}', function (Request $request, array $params
 // with the customer on-site) — docs/ARCHITECTURE.md §3.
 // ---------------------------------------------------------------------
 
+$router->get('/api/orders/{id}/stages/{stageId}/fat-sat', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stage = OrderAccess::requireVisibleStage($orderId, (int) $params['stageId'], $claims);
+
+    Response::json(FatSatRepository::listForStage((int) $stage['id']));
+});
+
 $router->post('/api/orders/{id}/stages/{stageId}/fat-sat', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
 
@@ -231,6 +255,18 @@ $router->patch('/api/fat-sat/{id}/result', function (Request $request, array $pa
         $reportDocumentId,
         $request->body['notes'] ?? null,
     ));
+});
+
+$router->get('/api/fat-sat/{id}/punch-items', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+
+    $record = FatSatRepository::find((int) $params['id']);
+    if ($record === null) {
+        Response::error('FAT/SAT record not found.', 404);
+    }
+    OrderAccess::requireVisibleStageByPk((int) $record['order_stage_id'], $claims);
+
+    Response::json(FatSatRepository::listPunchListForRecord((int) $record['id']));
 });
 
 $router->post('/api/fat-sat/{id}/punch-items', function (Request $request, array $params): void {
@@ -293,6 +329,14 @@ $router->patch('/api/punch-items/{id}/verify', function (Request $request, array
 // training records (stage 11) — the Engineer's own evidence tables.
 // ---------------------------------------------------------------------
 
+$router->get('/api/orders/{id}/stages/{stageId}/engineer-reports', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stage = OrderAccess::requireVisibleStage($orderId, (int) $params['stageId'], $claims);
+
+    Response::json(EngineerReportRepository::listForStage((int) $stage['id']));
+});
+
 $router->post('/api/orders/{id}/stages/{stageId}/engineer-reports', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
     Authenticator::requireRole($request, ['installation_engineer']);
@@ -317,6 +361,14 @@ $router->post('/api/orders/{id}/stages/{stageId}/engineer-reports', function (Re
         $request->body['notes'] ?? null,
     );
     Response::json($report, 201);
+});
+
+$router->get('/api/orders/{id}/stages/{stageId}/training', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stage = OrderAccess::requireVisibleStage($orderId, (int) $params['stageId'], $claims);
+
+    Response::json(TrainingRecordRepository::listForStage((int) $stage['id']));
 });
 
 $router->post('/api/orders/{id}/stages/{stageId}/training', function (Request $request, array $params): void {
@@ -348,6 +400,14 @@ $router->post('/api/orders/{id}/stages/{stageId}/training', function (Request $r
 // someone else's behalf: accepted_by_type must match the caller's own
 // role, accepted_by_user_id is always the caller, never client-supplied.
 // ---------------------------------------------------------------------
+
+$router->get('/api/orders/{id}/stages/{stageId}/acceptances', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stage = OrderAccess::requireVisibleStage($orderId, (int) $params['stageId'], $claims);
+
+    Response::json(AcceptanceRepository::listForStage((int) $stage['id']));
+});
 
 $router->post('/api/orders/{id}/stages/{stageId}/acceptances', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);

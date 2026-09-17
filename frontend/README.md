@@ -27,7 +27,15 @@ locally, or adjust the proxy target.
   dashboard just fetches its own already-scoped list and renders it
   through here), `CommentsPanel` and `ServiceTicketsPanel` (order detail
   page — channel-aware comments, and the full ticket lifecycle: raise,
-  advance, confirm-closure).
+  advance, confirm-closure). Evidence sub-forms — one per stage's
+  evidence table, dispatched by `StageEvidence` per `stage_id` inside the
+  order detail page's expanded stage row, deliberately mirroring the
+  backend's `StageCompletionEvaluator`: `RequirementsSection`,
+  `DocumentsSection` (also the download path — `downloadDocument()` in
+  `api.ts`, since a plain `<a href>` can't attach the JWT), `MilestonesSection`,
+  `FatSatSection` (+ nested punch-list management), `EngineerReportSection`,
+  `TrainingSection`, `AcceptanceSection` (auto-selects the one current
+  eligible target record rather than asking the user to pick).
 - `src/pages/` — one file per route. Each of the seven roles gets its own
   home view (`OwnerDashboardPage`, `SalesManagerDashboardPage`,
   `CoordinatorDashboardPage`, `ImportManagerDashboardPage`,
@@ -41,13 +49,16 @@ locally, or adjust the proxy target.
 Built: login, all seven role dashboards, order detail with live stage
 status updates (the real write path, not a mockup — business-rule
 rejections from the API are shown to the user verbatim), a comments
-panel, and a service-tickets panel (raise/advance/confirm-closure).
+panel, a service-tickets panel (raise/advance/confirm-closure), and the
+full set of per-stage evidence sub-forms. A fresh order has been walked
+through all 12 stages via the real UI end-to-end, across PC/Sales
+Manager/Engineer/Customer logins — see `../docs/ROADMAP.md` for what
+that caught.
 
-Pending (see `../docs/ROADMAP.md`): evidence sub-forms (milestones,
-FAT/SAT, engineer reports, training, acceptances) in the order detail
-page; AMC contract/visit management screens (the Engineer's dashboard
-surfaces due visits but can't yet create a contract or log one from the
-UI); a proper Playwright e2e suite (each round's smoke test has been run
-manually against a live backend during development, not committed — it
-needs seed-data fixtures to be a real repeatable suite, not a
-copy-pasted script).
+Pending: AMC contract/visit management screens and shipment/import-
+tracking screens for stages 6-8 (both API-complete, UI-absent — the
+12-stage walk had to fast-forward those three stages with direct
+database writes instead of through the UI); a proper Playwright e2e
+suite (each round's verification has been a manually-run script against
+a live backend, not committed — it needs seed-data fixtures to become a
+real repeatable suite).

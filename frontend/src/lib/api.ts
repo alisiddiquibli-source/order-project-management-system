@@ -90,3 +90,29 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
 }
+
+/**
+ * Downloads a locally-stored document through the authenticated file
+ * endpoint and triggers a browser save — a plain <a href> can't attach
+ * the bearer token, so this fetches the bytes and hands the browser an
+ * object URL instead. Google Drive-backed documents don't go through
+ * this: /api/documents/{id}/file returns their Drive file id as JSON,
+ * not a byte stream (see DocumentsSection).
+ */
+export async function downloadDocument(id: number, suggestedName: string): Promise<void> {
+  const token = getAccessToken()
+  const response = await fetch(`/api/documents/${id}/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, 'Could not download the file.')
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = suggestedName
+  link.click()
+  URL.revokeObjectURL(url)
+}

@@ -122,14 +122,55 @@ begins.
   place every such read passes through; confirmed via direct API calls
   that a supplier's response now omits those fields while a PC's response
   still includes them.
-  Pending: evidence sub-forms (milestones, FAT/SAT, engineer reports,
-  training, acceptances) in the order detail page; AMC contract/visit
-  management screens (the Engineer can see due visits but not yet create
-  a contract or log one from the UI — the API exists, `AmcContractRepository`
-  + `src/routes/service.php`, just not wired into a form yet); a committed
-  Playwright e2e suite with real seed fixtures (this round's verification
-  script, like the previous one, was run manually and not committed as-is
-  — it needs to become a real repeatable suite).
+  **Evidence sub-forms are now built**, one component per stage's evidence
+  table (`RequirementsSection`, `DocumentsSection`, `MilestonesSection`,
+  `FatSatSection` with nested punch-list management, `EngineerReportSection`,
+  `TrainingSection`, `AcceptanceSection`), dispatched per stage_id by
+  `StageEvidence` inside the order detail page's expanded stage row —
+  deliberately mirroring `StageCompletionEvaluator`'s own per-stage
+  evidence checks, so what the UI shows to fill in is exactly what the
+  server gates completion on. `AcceptanceSection` auto-selects the current
+  eligible target record (the live FAT/SAT attempt, the latest training
+  record, the latest handover-readiness report) rather than asking the
+  user to pick one — there's only ever one live candidate at a time.
+  Needed (and added) six GET list routes that only existed as
+  `listForStage()`/`listForOrder()` repository methods with no route
+  exposing them (`requirements`, `milestones`, `fat-sat`, `punch-items`,
+  `engineer-reports`, `training`, `acceptances`) — the sub-forms can't
+  show existing evidence without them.
+  Verified end-to-end against a live server: a fresh order walked through
+  **all 12 stages** via the real UI, across five logins (PC, Sales
+  Manager, Engineer, Customer, plus direct evidence writes for stages 6-8
+  only, since no shipment/import-tracking UI exists yet) — requirement
+  approval, PO upload, a milestone checklist, a punch-list item raised and
+  resolved, a FAT pass, an installation report, a SAT pass with genuine
+  customer acceptance, a training record with genuine customer acceptance,
+  and a handover certificate with genuine customer acceptance, ending with
+  the order showing all 12 stages `Completed`.
+  **Real bug caught by that walk, fixed before it shipped**: a stage-4
+  completion that supplied its confirming note in the *same* PATCH request
+  that also set `status=completed` was rejected — `StageCompletionEvaluator`
+  checked the database's notes column before that request's own notes
+  update had been applied, so a perfectly valid combined request always
+  failed. Fixed in `OrderStageRepository::updateStatus()` by wrapping the
+  notes write and the evidence check in one transaction (notes now apply
+  *before* the check runs), with a rollback — confirmed directly — if
+  completion is then still refused, so a failed request has no side
+  effects. Two UI-only issues surfaced by the same walk and fixed before
+  they shipped: the FAT/SAT punch-list "add" button and description field
+  shared exact text with the always-visible "raise a ticket" form, and the
+  FAT/SAT record-result button was labeled "Save" — identical to the
+  stage-status form's own "Save" button rendered right next to it.
+  Pending: AMC contract/visit management screens (the Engineer can see
+  due visits but not yet create a contract or log one from the UI — the
+  API exists, `AmcContractRepository` + `src/routes/service.php`, just not
+  wired into a form yet); shipment/import-tracking screens for stages
+  6-8 (also API-complete, UI-absent — this round's evidence walk had to
+  fast-forward those three stages with direct evidence writes rather than
+  through the UI); a committed Playwright e2e suite with real seed
+  fixtures (every verification pass so far, including this round's
+  12-stage walk, has been a manually-run script, not committed as-is — it
+  needs to become a real repeatable suite).
 - [ ] **Phase 6 — Bluehost deployment**
   cPanel MySQL DB, PHP deployment, static frontend build, SSL, both cron
   jobs (daily + hourly), go-live.
@@ -162,11 +203,14 @@ and fixed in the process (see `CLAUDE.md`'s "Known PHP/PDO gotcha" and
 stage-lookup notes) — caught precisely because testing went beyond the
 first happy path.
 
-Frontend — all seven role dashboards now exist and work end-to-end
-against the live backend, verified in an actual Chromium browser
-(screenshots taken, not just "it compiles"), plus a comments panel and a
-service-tickets panel on the order detail page. Next frontend work:
-evidence sub-forms, AMC management screens, and a committed e2e suite.
+Frontend — all seven role dashboards exist, plus a comments panel, a
+service-tickets panel, and now the full set of per-stage evidence
+sub-forms on the order detail page. A fresh order was walked through all
+12 stages via the real UI end-to-end (see Phase 4/frontend notes above),
+catching a genuine backend bug (a notes+completion race in the same
+request) and two UI text collisions along the way. Next frontend work:
+AMC/shipment/import-tracking screens (API-complete, UI-absent) and a
+committed e2e suite.
 
 Phase 3a (shipment/customs API) — complete; every core-pipeline stage
 (1–12) is now reachable through a real, tested API endpoint, none left

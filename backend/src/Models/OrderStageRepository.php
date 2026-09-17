@@ -95,41 +95,58 @@ final class OrderStageRepository
             }
         }
 
-        if ($newStatus === 'completed') {
-            $result = StageCompletionEvaluator::canComplete($orderId, (int) $stage['id'], $stageId);
-            if (!$result['ok']) {
-                return ['ok' => false, 'reason' => $result['reason']];
-            }
-        }
-
         $db = Database::connection();
-        $updates = ['status = :status', 'updated_by = :updated_by'];
-        $params = ['status' => $newStatus, 'updated_by' => $actorId, 'id' => $stage['id']];
+        $db->beginTransaction();
+        try {
+            // Notes are applied before the evidence check, not after — a
+            // stage 4 completion that supplies its confirming note in the
+            // very same request must see that note when it's evaluated,
+            // not just on some later request. If completion is then
+            // refused, the transaction rolls back and the note write
+            // rolls back with it, so a failed PATCH has no side effects.
+            if ($notes !== null) {
+                $db->prepare('UPDATE order_stages SET notes = :notes WHERE id = :id')
+                    ->execute(['notes' => $notes, 'id' => $stage['id']]);
+            }
 
-        if ($notes !== null) {
-            $updates[] = 'notes = :notes';
-            $params['notes'] = $notes;
-        }
-        if ($newStatus === 'in_progress' && $stage['actual_start'] === null) {
-            $updates[] = 'actual_start = CURDATE()';
-        }
-        if ($newStatus === 'completed' && $stage['actual_end'] === null) {
-            $updates[] = 'actual_end = CURDATE()';
-        }
+            if ($newStatus === 'completed') {
+                $result = StageCompletionEvaluator::canComplete($orderId, (int) $stage['id'], $stageId);
+                if (!$result['ok']) {
+                    $db->rollBack();
 
-        $sql = 'UPDATE order_stages SET ' . implode(', ', $updates) . ' WHERE id = :id';
-        $db->prepare($sql)->execute($params);
+                    return ['ok' => false, 'reason' => $result['reason']];
+                }
+            }
 
-        $db->prepare(
-            'INSERT INTO activity_log (order_id, entity_type, entity_id, action, old_value, new_value, user_id)
-             VALUES (:order_id, "order_stage", :entity_id, "status_change", :old_value, :new_value, :user_id)'
-        )->execute([
-            'order_id' => $orderId,
-            'entity_id' => $stage['id'],
-            'old_value' => $stage['status'],
-            'new_value' => $newStatus,
-            'user_id' => $actorId,
-        ]);
+            $updates = ['status = :status', 'updated_by = :updated_by'];
+            $params = ['status' => $newStatus, 'updated_by' => $actorId, 'id' => $stage['id']];
+
+            if ($newStatus === 'in_progress' && $stage['actual_start'] === null) {
+                $updates[] = 'actual_start = CURDATE()';
+            }
+            if ($newStatus === 'completed' && $stage['actual_end'] === null) {
+                $updates[] = 'actual_end = CURDATE()';
+            }
+
+            $sql = 'UPDATE order_stages SET ' . implode(', ', $updates) . ' WHERE id = :id';
+            $db->prepare($sql)->execute($params);
+
+            $db->prepare(
+                'INSERT INTO activity_log (order_id, entity_type, entity_id, action, old_value, new_value, user_id)
+                 VALUES (:order_id, "order_stage", :entity_id, "status_change", :old_value, :new_value, :user_id)'
+            )->execute([
+                'order_id' => $orderId,
+                'entity_id' => $stage['id'],
+                'old_value' => $stage['status'],
+                'new_value' => $newStatus,
+                'user_id' => $actorId,
+            ]);
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
 
         if ($newStatus === 'completed') {
             OrderRepository::maybeStartWarranty($orderId, $stageId);

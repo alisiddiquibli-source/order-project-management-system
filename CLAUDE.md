@@ -269,6 +269,24 @@ separation of concerns:
   in_progress -> resolved from the UI; closing is the customer's
   confirm-closure action or the SLA cron, matching
   `ServiceTicketRepository::advanceStatus()` server-side.
+- `src/components/StageEvidence.tsx` — dispatches to the right evidence
+  sub-form(s) for a stage by `stage_id`
+  (`RequirementsSection`/`DocumentsSection`/`MilestonesSection`/
+  `FatSatSection`/`EngineerReportSection`/`TrainingSection`/
+  `AcceptanceSection`), deliberately mirroring
+  `StageCompletionEvaluator`'s own per-stage checks — what the UI asks
+  for filling in should always be exactly what the server gates
+  completion on. `AcceptanceSection` auto-selects the current eligible
+  target record (the live FAT/SAT attempt, latest training record,
+  latest handover-readiness report) rather than offering a picker —
+  there's only ever one live candidate. Stages 6-8 have no sub-form yet
+  (shipment/import-tracking UI doesn't exist); stage 4 needs no sub-form
+  at all — it's satisfied by the note already on `StageUpdateForm`.
+  When adding a stage's evidence UI, check evidence.php first for a GET
+  list route — several existed only as `listForStage()`/`listForOrder()`
+  repository methods with no route exposing them until this pass added
+  six (`requirements`, `milestones`, `fat-sat`, `punch-items`,
+  `engineer-reports`, `training`, `acceptances`).
 - `src/pages/` — one file per role's home view (`OwnerDashboardPage`,
   `SalesManagerDashboardPage`, `CoordinatorDashboardPage`,
   `ImportManagerDashboardPage`, `EngineerDashboardPage`,
@@ -298,6 +316,25 @@ column and its `original_*` counterpart) during Phase 1 — both fixed, but
 the next dynamic query built by hand should be tested against a real
 `mysqld`, not just read back, precisely because this class of bug is
 invisible until executed.
+
+## Known ordering gotcha: evidence checks vs. the same request's own writes
+
+`OrderStageRepository::updateStatus()` can receive `notes` and
+`status=completed` in one PATCH. `StageCompletionEvaluator`'s stage-4
+check queries the database's `notes` column directly — if the notes
+UPDATE hasn't been applied yet when that check runs, a perfectly valid
+combined request (set the confirming note and complete the stage in one
+call) always fails, because the check sees the pre-request value. Fixed
+by applying the notes write first, inside the same transaction, before
+running the evidence check — with a rollback (notes included) if
+completion is then refused, so a failed PATCH has no side effects. Only
+found by an actual end-to-end UI walk through all 12 stages; a test that
+completes a stage and sets its notes as two separate requests would never
+hit this. **Any evidence check that reads the database directly (rather
+than the in-memory state a route already has) needs to account for
+writes made earlier in the same request/transaction, not just prior
+ones** — check `StageCompletionEvaluator`'s per-stage query if adding
+another field that can be set at completion time.
 
 ## Conventions
 

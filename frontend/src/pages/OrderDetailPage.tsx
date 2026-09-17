@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
 import { CommentsPanel } from '../components/CommentsPanel'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
+import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -75,6 +76,12 @@ export function OrderDetailPage() {
 
                   {canEditStages && order?.status === 'active' && (
                     <StageUpdateForm stage={stage} onUpdated={reload} />
+                  )}
+
+                  {order && (
+                    <div className="mt-3">
+                      <StageEvidence orderId={order.id} stage={stage} />
+                    </div>
                   )}
                 </div>
               )}
