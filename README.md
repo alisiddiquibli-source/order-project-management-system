@@ -1,6 +1,8 @@
 # Order & Project Lifecycle Management System
 
-A system to plan, execute and monitor equipment/project orders end-to-end:
+A system to plan, execute and monitor customer projects end-to-end. **A
+Project is one customer deal; an Order is one machine** — a project can
+hold several orders, each running its own pipeline independently:
 requirements → ordering → machine manufacturing progress at the supplier's
 site → machine testing material coordination → machine FAT readiness →
 shipment coordination → import clearance in Pakistan → delivery →
