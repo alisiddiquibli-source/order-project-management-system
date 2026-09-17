@@ -44,6 +44,17 @@ data entry, just not pipeline data.
 Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 `docs/ROADMAP.md` — check this before starting new work.
 
+## UX principle (standing requirement — see ARCHITECTURE.md §11.1)
+
+Seven very different audiences use this system. **Every screen must be
+friendly, attractive, and designed around how that specific role actually
+works** — not one generic admin-panel skin reused everywhere. Owner gets
+portfolio risk first, Sales Manager gets their projects' status, PC gets
+today's actions, Engineer gets on-site forms usable on a phone/tablet,
+Customer/Supplier get a zero-onboarding self-explanatory view. Build this
+in from the first screen of Phase 1 — don't ship a bare table/CRUD UI and
+plan to "prettify later."
+
 ## Stack
 
 - Backend: PHP 8 + PDO/MySQL, REST API (JSON)

@@ -625,6 +625,32 @@ load.
 
 ## 11. Tech stack
 
+### 11.1 UX principle (standing requirement, applies to every screen)
+
+The system has seven very different audiences — a Company Owner scanning a
+portfolio, a Sales Manager triaging risk, a PC doing detailed data entry
+all day, an Engineer filling forms on-site (often on a phone/tablet), and
+external Customers/Suppliers who never received training on this tool.
+**The UI must be friendly, attractive, and designed around how each of
+these people actually works — not one generic admin-panel skin reused
+seven times.** Concretely:
+
+- Each role's home view leads with what that role needs first (Owner:
+  portfolio risk; Sales Manager: their projects' status; PC: today's
+  actions; Engineer: their assigned site visit's forms; Customer/Supplier:
+  their project's progress) — not a generic table dump.
+- Forms the Engineer fills on-site (installation report, FAT/SAT,
+  training) must work well on a phone/tablet, with large touch targets —
+  this is real field-use, not just desktop office work.
+- External-facing screens (Customer/Supplier) must be self-explanatory
+  with zero onboarding — they use this rarely and were never trained on
+  it, unlike internal staff.
+- Consistent visual language (color, iconography) so status at a glance is
+  immediately readable — e.g., risk/delay states use the same color logic
+  everywhere, never ambiguous or purely textual.
+- This is a design requirement, not a nice-to-have to defer — build it in
+  from Phase 1's first screen, not retrofitted later.
+
 - **Backend**: PHP 8 + PDO/MySQL, REST API (JSON) — Bluehost shared
   hosting compatible, consistent with the team's other project.
 - **Frontend**: SPA (Vue or React), static build, role-based app shells.
