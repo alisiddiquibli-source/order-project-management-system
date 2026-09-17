@@ -15,10 +15,16 @@ point of data entry, owns every order assigned to them), Sales Manager
 comment only, no edit rights — joins the Project Coordinator on stages 6–8
 only when the customer's import team asks for help), Installation & Service
 Engineer (owns installation/SAT/training/handover + post-handover service
-for their assigned orders).
+for their assigned orders). BLI has multiple people per role (several PCs,
+several Sales Managers, etc.) — **one login per person**, and each login's
+access is every order that person is assigned to (`project_coordinator_id`
+/ `sales_manager_id` / `installation_engineer_id`), not role-wide (except
+Company Owner and Import Manager, who are role-wide by design).
 
-External: one supplier login + one customer login **per project** (not per
-company) — observer + comment only, scoped by `scope_order_id`.
+External: **one customer login per project** (`scope_order_id`), but **one
+supplier login per supplier company covering every project that company
+supplies** (`supplier_id`, via the `suppliers` table) — observer + comment
+only, no data entry, for both.
 
 Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 `docs/ROADMAP.md` — check this before starting new work.
@@ -33,8 +39,9 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
 ## Non-negotiable rules
 
 - Every request touching an order/stage/document/comment is authorized
-  against the requesting user's assigned order(s) or `scope_order_id`
-  server-side — never trust a client-supplied order ID alone. External
+  server-side against the requesting user's actual scope — their assigned
+  order(s) for internal roles, `scope_order_id` for a customer, `supplier_id`
+  for a supplier — never trust a client-supplied order ID alone. External
   logins are the top cross-tenant leakage risk in this system.
 - `documents.visibility` (`internal|supplier|customer|shared`) is enforced on
   every read path, not just in the UI.

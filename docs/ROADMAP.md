@@ -8,9 +8,10 @@ begins.
   Manager, Import Manager, Installation & Service Engineer), orders +
   requirements + the 12-stage pipeline (entered/updated by the Project
   Coordinator), document upload, Company Owner portfolio dashboard.
-- [ ] **Phase 2 — External project logins**
-  One supplier login + one customer login per project — observer + comment
-  only, scoped via `scope_order_id`.
+- [ ] **Phase 2 — External logins**
+  One customer login per project (`scope_order_id`) and one supplier login
+  per supplier company spanning all their projects (`supplier_id`) —
+  observer + comment only.
 - [ ] **Phase 3 — Shipment & customs detail + notifications**
   Shipment tracking fields, email alerts on milestone due/overdue, comment
   notifications to relevant roles.
@@ -26,11 +27,12 @@ begins.
 
 ## Open item to revisit
 
-External logins are scoped to one project each (a repeat customer/supplier
-gets a fresh login per order). If this becomes inconvenient in practice
-(same customer, many projects, many passwords to remember), the fix is to
-add a `companies` table back and link multiple orders to one external
-account — flagged here so it's not forgotten, not built until asked for.
+Customer logins are still scoped to one project each (a repeat customer
+gets a fresh login per order) — suppliers already got the multi-project
+treatment (§5 `suppliers` table). If per-project customer logins become
+inconvenient in practice, the fix is a `customers` table mirroring
+`suppliers`, linking one login to all of that customer's orders — flagged
+here so it's not forgotten, not built until asked for.
 
 ## Current status
 

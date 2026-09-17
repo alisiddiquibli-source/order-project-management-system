@@ -6,15 +6,21 @@ Track an order/project from customer requirement to post-handover service,
 for **Business Links International (BLI)**, across two kinds of audiences:
 
 - **Internal team** — full visibility, with roles split by function (see §4).
-- **External parties** — one supplier login and one customer login *per
-  project*, both observer + commenter only (no data entry).
+  BLI has multiple people in the same role (several Project Coordinators,
+  several Sales Managers, etc.) — each person has **one login**, and that
+  login sees every order they're assigned to, whatever the role.
+- **External parties** — observer + commenter only, no data entry:
+  - **Customer** — one login *per project*. A customer with two projects
+    with BLI gets two separate logins.
+  - **Supplier** — one login *per supplier company*, but scoped to **all**
+    projects that company supplies to BLI, not just one.
 
 Because external logins exist, **data isolation is a first-class
 requirement**: a customer must never see another customer's order, and a
-supplier must never see another supplier's pricing, schedule, or documents.
-Since each external login is scoped to a single project, this is simpler to
-enforce than a multi-project external account would be — the login's
-`scope_order_id` is the entire access boundary.
+supplier must never see another supplier's pricing, schedule, or documents
+for an order it isn't part of. Customer access is bounded by a single
+`scope_order_id`; supplier access is bounded by `supplier_id` matched
+against every order that supplier is linked to.
 
 ## 2. Workflow — the order pipeline
 
@@ -78,28 +84,36 @@ portfolio.
 
 | Role | Assigned how | Scope |
 |------|--------------|-------|
-| **Company Owner** | By role, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
-| **Project Coordinator** | Assigned per order (1 per order) | Full read/write on their assigned order(s): creates the order, updates all 12 stages + documents + shipments. The operational hub. |
-| **Sales Manager** | Assigned per order (their customer relationship) | Read + comment on their assigned order(s); sees contract/customer info; notified on milestones and delays affecting that customer. |
-| **Import Manager** | Global advisory role (not per-order) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the Project Coordinator, only when the customer's import team needs input. No stage-status edit rights. |
-| **Installation & Service Engineer** | Assigned per order | Full read/write on stages 9–12 for their assigned order(s), plus all service tickets/AMC schedules for those orders after handover. |
-| **Supplier** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees stages/documents relevant to their side (3–6: manufacturing, testing material, FAT, shipment coordination), not commercial terms with the customer. |
-| **Customer** (external) | One login per project | Observer + comment only, on the one project they're linked to. Sees overall progress + shared documents, can raise a service ticket post-handover, and confirms SAT sign-off as a specific comment/action. |
+| **Company Owner** | One login per person; role-based, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
+| **Project Coordinator** | One login per person; assigned to N orders as `project_coordinator_id` | Full read/write on every order they're assigned to: creates the order, updates all 12 stages + documents + shipments. The operational hub. BLI has multiple PCs — each order has exactly one, each PC can hold many orders. |
+| **Sales Manager** | One login per person; assigned to N orders as `sales_manager_id` | Read + comment on every order they're assigned to; sees contract/customer info; notified on milestones and delays for those customers. BLI has multiple Sales Managers, same many-orders-per-person model. |
+| **Import Manager** | One login per person; global advisory role (not tied to specific orders) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the assigned Project Coordinator, only when the customer's import team needs input. No stage-status edit rights. |
+| **Installation & Service Engineer** | One login per person; assigned to N orders as `installation_engineer_id` | Full read/write on stages 9–12 for every order they're assigned to, plus all service tickets/AMC schedules for those orders after handover. |
+| **Supplier** (external) | One login per supplier company | Observer + comment only, across **every** order linked to that supplier (`orders.supplier_id`). Sees stages/documents relevant to their side (3–6: manufacturing, testing material, FAT, shipment coordination) on each of those orders, not commercial terms with the customer. |
+| **Customer** (external) | One login per project | Observer + comment only, on the **one** order they're linked to (`scope_order_id`). Sees overall progress + shared documents, can raise a service ticket post-handover, and confirms SAT sign-off as a specific comment/action. |
 
-Every API request is authorized by `(user.role, user.assigned_order_ids or
-scope_order_id)` — never by trusting an order ID passed from the client
-alone. Company Owner and Import Manager are the two roles with cross-order
-visibility; every other internal role and both external roles are scoped to
-specific assigned orders.
+Every API request is authorized server-side against the requesting user's
+actual scope — never by trusting an order ID passed from the client alone:
+- Company Owner / Import Manager → role check only, no order-level filter.
+- Project Coordinator / Sales Manager / Installation & Service Engineer →
+  `order.project_coordinator_id` / `sales_manager_id` / `installation_engineer_id`
+  must equal the requesting user's id.
+- Supplier → `order.supplier_id` must equal the requesting user's `supplier_id`.
+- Customer → the order id must equal the requesting user's `scope_order_id`.
 
 ## 5. Core data model
 
 ```
+suppliers         (id, name, contact_email, contact_phone)
+                   -- one row per supplier company; a supplier login is a
+                   -- `users` row with role=supplier and this supplier_id
+
 users             (id, name, email, password_hash, role, status,
-                   scope_order_id)   -- set only for supplier/customer logins
+                   scope_order_id,   -- set only for customer logins (their one project)
+                   supplier_id)      -- set only for supplier logins (their company)
 
 orders            (id, order_number, customer_name, customer_contact,
-                   title, description, contract_value, currency,
+                   supplier_id, title, description, contract_value, currency,
                    start_date, target_handover_date, status,
                    project_coordinator_id, sales_manager_id,
                    installation_engineer_id, created_by)
@@ -138,13 +152,12 @@ ai_reports        (id, order_id, type, provider, prompt, response,
                    created_by, created_at)
 ```
 
-Note: `orders.customer_name`/`customer_contact` replace a `companies` table
-for customers/suppliers, since external access is per-project rather than
-per-company — there's no reusable "customer account" to link to. Supplier
-identity is captured the same way against `order_stages`/comments context
-rather than a shared `companies` row. If BLI later wants one login to cover
-a repeat customer's multiple projects, this is the piece that would need to
-change (see ROADMAP).
+Note: `orders.customer_name`/`customer_contact` stay as plain fields rather
+than a `customers` table, since customer access is genuinely per-project —
+there's no reusable customer login to link to. `suppliers` gets a real table
+because supplier access spans multiple orders and is the same login every
+time. If BLI later wants one login to cover a repeat customer's multiple
+projects too, add a `customers` table the same way (see ROADMAP).
 
 `documents.visibility` is enforced on every read — a customer- or
 supplier-facing endpoint never returns a document tagged `internal`,
@@ -205,8 +218,9 @@ Rules:
 
 - Force HTTPS (Bluehost's free SSL) — credentials and commercial
   (pricing/customs) data will transit this system.
-- Every external-facing endpoint (supplier/customer) re-checks
-  `scope_order_id` server-side on every request, not just at login.
+- Every external-facing endpoint re-checks the requester's actual scope
+  server-side on every request, not just at login: `scope_order_id` for a
+  customer, `supplier_id` for a supplier.
 - Login rate-limiting/lockout on the externally exposed portals.
 - Regular DB backups (cPanel automated backup + periodic manual dump), since
   this becomes the system of record for contractual milestones (SAT
