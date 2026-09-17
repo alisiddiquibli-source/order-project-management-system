@@ -62,7 +62,9 @@ final class CommentRepository
         $params['order_id'] = $orderId;
 
         $stmt = Database::connection()->prepare(
-            "SELECT * FROM comments WHERE order_id = :order_id AND ({$sql}) ORDER BY created_at"
+            "SELECT c.*, u.name AS user_name FROM comments c
+             JOIN users u ON u.id = c.user_id
+             WHERE c.order_id = :order_id AND ({$sql}) ORDER BY c.created_at"
         );
         $stmt->execute($params);
 
@@ -79,7 +81,9 @@ final class CommentRepository
         $params['project_id'] = $projectId;
 
         $stmt = Database::connection()->prepare(
-            "SELECT * FROM comments WHERE project_id = :project_id AND order_id IS NULL AND ({$sql}) ORDER BY created_at"
+            "SELECT c.*, u.name AS user_name FROM comments c
+             JOIN users u ON u.id = c.user_id
+             WHERE c.project_id = :project_id AND c.order_id IS NULL AND ({$sql}) ORDER BY c.created_at"
         );
         $stmt->execute($params);
 

@@ -4,12 +4,11 @@ import { OrderPortfolioTable, SummaryCard, loadPortfolio, type OrderWithStages }
 import { api } from '../lib/api'
 
 /**
- * Company Owner's home view: portfolio-wide, every order, at-a-glance
- * status — leads with what this role needs first (§11.1). Dedicated
- * summary/aggregation endpoints are a known follow-up (docs/ROADMAP.md);
- * this fetches per-order stage lists client-side in the meantime.
+ * Sales Manager's home view: full read visibility on every order across
+ * their own projects (docs/ARCHITECTURE.md §7 — the server already scopes
+ * `/orders` to projects they're the custodian of, nothing to filter here).
  */
-export function OwnerDashboardPage() {
+export function SalesManagerDashboardPage() {
   const [orders, setOrders] = useState<OrderWithStages[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,7 +20,7 @@ export function OwnerDashboardPage() {
         if (!cancelled) setOrders(data)
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load the portfolio. Please try again shortly.')
+        if (!cancelled) setError('Could not load your projects. Please try again shortly.')
       })
 
     return () => {
@@ -32,7 +31,7 @@ export function OwnerDashboardPage() {
   const atRiskCount = orders?.filter((o) => o.stages.some((s) => s.status === 'delayed' || s.status === 'blocked')).length ?? 0
 
   return (
-    <AppShell title="Portfolio">
+    <AppShell title="My Projects">
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard label="Active orders" value={orders?.filter((o) => o.status === 'active').length ?? '—'} />
         <SummaryCard label="Needs attention" value={orders ? atRiskCount : '—'} tone={atRiskCount > 0 ? 'warning' : 'default'} />

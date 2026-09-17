@@ -22,23 +22,32 @@ locally, or adjust the proxy target.
   `types.ts` (shapes matching the backend's JSON responses).
 - `src/components/` — shared UI: `StatusBadge` (the one place stage/order
   status renders, so it's consistent everywhere), `ProgressBar`,
-  `AppShell` (header/nav).
-- `src/pages/` — one file per route. Each role gets its own home view
-  (`OwnerDashboardPage`, `CoordinatorDashboardPage`, `ComingSoonPage` for
-  roles not yet built) rather than one generic screen reused everywhere.
+  `AppShell` (header/nav), `OrderPortfolioTable` (the "every order I can
+  see" table shared by Owner/Sales Manager/Import Manager — each role's
+  dashboard just fetches its own already-scoped list and renders it
+  through here), `CommentsPanel` and `ServiceTicketsPanel` (order detail
+  page — channel-aware comments, and the full ticket lifecycle: raise,
+  advance, confirm-closure).
+- `src/pages/` — one file per route. Each of the seven roles gets its own
+  home view (`OwnerDashboardPage`, `SalesManagerDashboardPage`,
+  `CoordinatorDashboardPage`, `ImportManagerDashboardPage`,
+  `EngineerDashboardPage`, `SupplierDashboardPage`,
+  `CustomerDashboardPage`) rather than one generic screen reused
+  everywhere; `ComingSoonPage` remains as the fallback for an
+  unrecognized role.
 
 ## What's built vs. pending
 
-Built: login, Company Owner's portfolio view, Project Coordinator's
-order list + order detail with live stage status updates (the real
-write path, not a mockup — business-rule rejections from the API are
-shown to the user verbatim).
+Built: login, all seven role dashboards, order detail with live stage
+status updates (the real write path, not a mockup — business-rule
+rejections from the API are shown to the user verbatim), a comments
+panel, and a service-tickets panel (raise/advance/confirm-closure).
 
-Pending (see `../docs/ROADMAP.md`): Sales Manager, Import Manager,
-Installation & Service Engineer, Supplier, and Customer views (they land
-on `ComingSoonPage` today — their login and API access already work);
-evidence sub-forms (milestones, FAT/SAT, engineer reports, training,
-acceptances) in the order detail page; a proper Playwright e2e suite
-(a one-off smoke test was run manually against a live backend during
-development, not committed — it needs seed-data fixtures to be a real
-repeatable suite, not a copy-pasted script).
+Pending (see `../docs/ROADMAP.md`): evidence sub-forms (milestones,
+FAT/SAT, engineer reports, training, acceptances) in the order detail
+page; AMC contract/visit management screens (the Engineer's dashboard
+surfaces due visits but can't yet create a contract or log one from the
+UI); a proper Playwright e2e suite (each round's smoke test has been run
+manually against a live backend during development, not committed — it
+needs seed-data fixtures to be a real repeatable suite, not a
+copy-pasted script).

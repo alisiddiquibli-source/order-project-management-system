@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
+import { CommentsPanel } from '../components/CommentsPanel'
+import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
 import { StatusBadge } from '../components/StatusBadge'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -79,6 +81,13 @@ export function OrderDetailPage() {
             </li>
           ))}
         </ol>
+      )}
+
+      {order && (
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ServiceTicketsPanel orderId={order.id} />
+          <CommentsPanel orderId={order.id} />
+        </div>
       )}
     </AppShell>
   )

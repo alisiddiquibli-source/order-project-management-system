@@ -34,7 +34,7 @@ final class OrderRepository
         );
         $stmt->execute($params);
 
-        return $stmt->fetchAll();
+        return array_map(fn (array $order) => self::redactForRole($order, $claims), $stmt->fetchAll());
     }
 
     /**
@@ -53,7 +53,25 @@ final class OrderRepository
         $stmt->execute(['id' => $id, ...$scope['params']]);
         $order = $stmt->fetch();
 
-        return $order === false ? null : $order;
+        return $order === false ? null : self::redactForRole($order, $claims);
+    }
+
+    /**
+     * A supplier-facing read never includes commercial terms
+     * (docs/ARCHITECTURE.md §6) — enforced here, once, for every path an
+     * order can reach a supplier login through, rather than per-route.
+     *
+     * @param array<string, mixed> $order
+     * @param array<string, mixed> $claims
+     * @return array<string, mixed>
+     */
+    private static function redactForRole(array $order, array $claims): array
+    {
+        if (($claims['role'] ?? null) === 'supplier') {
+            unset($order['contract_value'], $order['currency']);
+        }
+
+        return $order;
     }
 
     /**

@@ -23,7 +23,7 @@ final class ProjectRepository
         );
         $stmt->execute($scope['params']);
 
-        return $stmt->fetchAll();
+        return array_map(fn (array $project) => self::redactForRole($project, $claims), $stmt->fetchAll());
     }
 
     /**
@@ -42,7 +42,24 @@ final class ProjectRepository
         $stmt->execute(['id' => $id, ...$scope['params']]);
         $project = $stmt->fetch();
 
-        return $project === false ? null : $project;
+        return $project === false ? null : self::redactForRole($project, $claims);
+    }
+
+    /**
+     * A supplier-facing read never includes customer identity
+     * (docs/ARCHITECTURE.md §6) — enforced here, once, rather than per-route.
+     *
+     * @param array<string, mixed> $project
+     * @param array<string, mixed> $claims
+     * @return array<string, mixed>
+     */
+    private static function redactForRole(array $project, array $claims): array
+    {
+        if (($claims['role'] ?? null) === 'supplier') {
+            unset($project['customer_name'], $project['customer_contact']);
+        }
+
+        return $project;
     }
 
     /**

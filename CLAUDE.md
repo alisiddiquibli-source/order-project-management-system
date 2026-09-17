@@ -191,7 +191,17 @@ plan to "prettify later."
   so existence is never leaked. `DocumentRepository`/`CommentRepository`
   additionally filter by `visibility`/`channel` per role (see
   `visibilityFilter()`/`channelFilter()`), separate from the order-level
-  scope check.
+  scope check. `OrderRepository`/`ProjectRepository` additionally run
+  every row through `redactForRole()` before returning it — **row-level
+  scope (who can see this order at all) and field-level scope (which
+  columns of it they can see) are different checks; a role can pass the
+  first and still need columns stripped.** Caught late: Phase 1-4 had
+  `SELECT o.*`/`SELECT p.*` reaching a supplier login with
+  `contract_value`/`currency`/`customer_name` intact, missed until the
+  Supplier dashboard's own live-API check surfaced it (docs/ROADMAP.md).
+  When adding a new supplier- or customer-facing read, check whether it
+  needs a `redactForRole()` step too — don't assume row-level scoping
+  alone is enough.
 - `src/Domain/` — business-rule logic that isn't simple CRUD:
   `StageCompletionEvaluator` (the §3.1/§3.2 gate for marking a stage
   `completed`), `AcceptanceRules` (which acceptance type/target table a
@@ -248,8 +258,21 @@ separation of concerns:
 - `src/components/StatusBadge.tsx` — the *only* place a stage/order
   status renders anywhere in the app. Never hand-roll a status pill
   elsewhere — status must read identically on every screen (§11.1).
-- `src/pages/` — one file per role's home view
-  (`OwnerDashboardPage`, `CoordinatorDashboardPage`), routed by role in
+- `src/components/OrderPortfolioTable.tsx` — the "every order I can see"
+  table + summary cards shared by Owner/Sales Manager/Import Manager
+  dashboards, plus `loadPortfolio()`, the client-side orders+stages fetch
+  they all use. Don't re-copy this table into a fourth dashboard — extend
+  it or compose around it instead.
+- `src/components/CommentsPanel.tsx` / `ServiceTicketsPanel.tsx` — order
+  detail page panels. The ticket panel deliberately has no "close" button
+  for an Engineer — advancing a ticket only ever goes open ->
+  in_progress -> resolved from the UI; closing is the customer's
+  confirm-closure action or the SLA cron, matching
+  `ServiceTicketRepository::advanceStatus()` server-side.
+- `src/pages/` — one file per role's home view (`OwnerDashboardPage`,
+  `SalesManagerDashboardPage`, `CoordinatorDashboardPage`,
+  `ImportManagerDashboardPage`, `EngineerDashboardPage`,
+  `SupplierDashboardPage`, `CustomerDashboardPage`), routed by role in
   `App.tsx`'s `HomePage`. A role with no dedicated view yet gets
   `ComingSoonPage`, not a broken screen — add its real dashboard as its
   own file when built, don't retrofit `ComingSoonPage` into one.

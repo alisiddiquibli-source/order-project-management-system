@@ -95,18 +95,41 @@ begins.
 - [~] **Frontend** (not one of the numbered backend phases — tracked
   alongside them)
   React + TypeScript + Vite + Tailwind. Built: login, JWT handling with
-  silent refresh, Company Owner's portfolio dashboard, Project
-  Coordinator's order list + order detail page with live stage status
-  updates (a real write path — API business-rule rejections are shown to
-  the user verbatim, not swallowed). Verified with a real Chromium
-  browser against a live backend + database, screenshotted, not just
-  type-checked. Pending: Sales Manager/Import Manager/Installation &
-  Service Engineer/Supplier/Customer dashboards (they land on a
-  placeholder today — login and API access already work for them);
-  evidence sub-forms (milestones, FAT/SAT, engineer reports, training,
-  acceptances) in the order detail page; a committed Playwright e2e
-  suite with real seed fixtures (a one-off manual smoke test was run
-  during development, not committed as-is).
+  silent refresh, all seven role dashboards (Company Owner and Project
+  Coordinator from before; Sales Manager, Import Manager, Installation &
+  Service Engineer, Supplier, and Customer added this round), order
+  detail page with live stage status updates (a real write path — API
+  business-rule rejections are shown to the user verbatim, not
+  swallowed), plus a comments panel and a service-tickets panel on the
+  order detail page (list, raise, advance open -> in_progress -> resolved,
+  customer confirm-closure — the Phase 3b/4 UI). Sales Manager/Import
+  Manager share one `OrderPortfolioTable` component with the Owner rather
+  than three near-identical copies; the Engineer's dashboard aggregates
+  open tickets and due AMC visits client-side (no dedicated "my visits"
+  endpoint exists yet, only the Owner's portfolio-wide one).
+  Verified with a real Chromium browser against a live backend + database
+  for all seven roles, screenshotted, not just type-checked — including a
+  full ticket lifecycle driven through the actual UI (customer raises one,
+  engineer works it to resolved, customer confirms closure) and a posted
+  comment round-trip.
+  **Real bug caught by this pass, fixed before it reached the UI**: the
+  backend's order/project read paths returned every column to every
+  authorized role, including `contract_value`/`currency` on orders and
+  `customer_name`/`customer_contact` on projects to a **supplier** login —
+  a violation of docs/ARCHITECTURE.md §6 ("supplier visibility is enforced
+  by field, not just by 'not commercial terms'"). Fixed with a
+  `redactForRole()` step in `OrderRepository`/`ProjectRepository`, the one
+  place every such read passes through; confirmed via direct API calls
+  that a supplier's response now omits those fields while a PC's response
+  still includes them.
+  Pending: evidence sub-forms (milestones, FAT/SAT, engineer reports,
+  training, acceptances) in the order detail page; AMC contract/visit
+  management screens (the Engineer can see due visits but not yet create
+  a contract or log one from the UI — the API exists, `AmcContractRepository`
+  + `src/routes/service.php`, just not wired into a form yet); a committed
+  Playwright e2e suite with real seed fixtures (this round's verification
+  script, like the previous one, was run manually and not committed as-is
+  — it needs to become a real repeatable suite).
 - [ ] **Phase 6 — Bluehost deployment**
   cPanel MySQL DB, PHP deployment, static frontend build, SSL, both cron
   jobs (daily + hourly), go-live.
@@ -139,10 +162,11 @@ and fixed in the process (see `CLAUDE.md`'s "Known PHP/PDO gotcha" and
 stage-lookup notes) — caught precisely because testing went beyond the
 first happy path.
 
-Frontend — a real vertical slice, not just scaffolding: Company Owner and
-Project Coordinator dashboards work end-to-end against the live backend,
-verified in an actual Chromium browser (screenshots taken, not just
-"it compiles"). Other five roles' dashboards are the next frontend work.
+Frontend — all seven role dashboards now exist and work end-to-end
+against the live backend, verified in an actual Chromium browser
+(screenshots taken, not just "it compiles"), plus a comments panel and a
+service-tickets panel on the order detail page. Next frontend work:
+evidence sub-forms, AMC management screens, and a committed e2e suite.
 
 Phase 3a (shipment/customs API) — complete; every core-pipeline stage
 (1–12) is now reachable through a real, tested API endpoint, none left

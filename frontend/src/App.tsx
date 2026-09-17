@@ -3,9 +3,14 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { CoordinatorDashboardPage } from './pages/CoordinatorDashboardPage'
+import { CustomerDashboardPage } from './pages/CustomerDashboardPage'
+import { EngineerDashboardPage } from './pages/EngineerDashboardPage'
+import { ImportManagerDashboardPage } from './pages/ImportManagerDashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage'
+import { SalesManagerDashboardPage } from './pages/SalesManagerDashboardPage'
+import { SupplierDashboardPage } from './pages/SupplierDashboardPage'
 
 function HomePage() {
   const { user } = useAuth()
@@ -13,8 +18,18 @@ function HomePage() {
   switch (user?.role) {
     case 'company_owner':
       return <OwnerDashboardPage />
+    case 'sales_manager':
+      return <SalesManagerDashboardPage />
     case 'project_coordinator':
       return <CoordinatorDashboardPage />
+    case 'import_manager':
+      return <ImportManagerDashboardPage />
+    case 'installation_engineer':
+      return <EngineerDashboardPage />
+    case 'supplier':
+      return <SupplierDashboardPage />
+    case 'customer':
+      return <CustomerDashboardPage />
     default:
       return <ComingSoonPage />
   }
