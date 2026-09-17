@@ -9,21 +9,30 @@ track the supplier's own raw-material import — scope starts at manufacturing.
 Pakistan customs clearance and final delivery (stages 7–8) are executed by
 the **customer's own import team**, not BLI — BLI only coordinates.
 
-Internal roles: Company Owner (portfolio view across all orders), **Sales
-Manager (the primary accountable custodian of each of their assigned
-orders** — full read visibility into everything on the order, directs the
-PC, receives every alert and AI advisory; doesn't enter data directly),
-Project Coordinator (the operational executor — single point of data entry,
-accountable to that order's Sales Manager), Import Manager (global advisor,
-comment only, no edit rights — joins the PC and Sales Manager on stages 6–8
-only when the customer's import team asks for help), Installation & Service
-Engineer (owns installation/SAT/training/handover + post-handover service
-for their assigned orders, accountable to that order's Sales Manager). BLI
-has multiple people per role (several PCs, several Sales Managers, etc.) —
-**one login per person**, and each login's access is every order that
-person is assigned to (`project_coordinator_id` / `sales_manager_id` /
-`installation_engineer_id`), not role-wide (except Company Owner and Import
-Manager, who are role-wide by design).
+Internal roles, in accountability order:
+
+1. **Company Owner** — full visibility across every order: who's assigned
+   as Sales Manager and PC on each, how each is tracking, plus every
+   deadline alert and AI advisory at portfolio scope (not just a digest).
+   No data entry.
+2. **Sales Manager** — primary accountable custodian of each of their
+   assigned orders. Full read visibility into everything on the order,
+   directs the PC, receives every alert and AI advisory for that order.
+   Doesn't enter data directly.
+3. **Project Coordinator** — the operational executor and sole data-entry
+   point, accountable to that order's Sales Manager.
+4. **Import Manager** — global advisor, comment only, no edit rights; joins
+   the PC and Sales Manager on stages 6–8 only when the customer's import
+   team asks for help.
+5. **Installation & Service Engineer** — owns installation/SAT/training/
+   handover + post-handover service for their assigned orders, accountable
+   to that order's Sales Manager.
+
+BLI has multiple people per role (several PCs, several Sales Managers,
+etc.) — **one login per person**, and each login's access is every order
+that person is assigned to (`project_coordinator_id` / `sales_manager_id`
+/ `installation_engineer_id`), not role-wide (except Company Owner and
+Import Manager, who are role-wide by design).
 
 External: **one customer login per project** (`scope_order_id`), but **one
 supplier login per supplier company covering every project that company
@@ -63,8 +72,11 @@ Full design: `docs/ARCHITECTURE.md`. Build order and current phase:
   and at-risk notifications (see `docs/ARCHITECTURE.md` §3.4) — don't
   hand-roll a second overdue check elsewhere. Alerts go to the order's PC,
   its Sales Manager, and every Company Owner — never just the PC.
-- AI risk-advisory output is surfaced to the Sales Manager and the PC
-  jointly (see `docs/ARCHITECTURE.md` §7) — it's not a PC-only tool.
+- AI risk-advisory output is surfaced to the Sales Manager, the PC, and the
+  Company Owner jointly per order (see `docs/ARCHITECTURE.md` §7) — it's
+  not a PC-only tool. The Owner additionally gets portfolio-level pattern
+  advisory (e.g., a PC or Sales Manager with multiple orders trending
+  delayed) that per-order roles don't see.
 - AI provider keys (Claude/Gemini/ChatGPT) live server-side only, never sent
   to the frontend.
 - Uploaded documents are served through an authenticated endpoint, never as

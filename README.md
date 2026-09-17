@@ -6,10 +6,12 @@ site → machine testing material coordination → machine FAT readiness →
 shipment coordination → import clearance in Pakistan → delivery →
 installation → SAT → training → handover → post-handover service/AMC.
 
-Built for the internal team (Company Owner, **Sales Manager** — the
-accountable custodian of each project, with full visibility and AI-backed
-advisories on their dashboard, directing the Project Coordinator who does
-the actual data entry — Import Manager, Installation & Service Engineer).
+Built for the internal team: **Company Owner** — full visibility across the
+entire portfolio, every project, who's running it, and AI-backed advisories
+right on their dashboard; **Sales Manager** — the accountable custodian of
+each of their own projects, same full visibility and AI advisories, scoped
+to their book of work, directing the **Project Coordinator** who does the
+actual data entry; plus Import Manager and Installation & Service Engineer.
 BLI has several people in each role, and each person gets one login
 covering every project assigned to them. External access is
 observer-plus-comment only, no data entry: one login per project for the

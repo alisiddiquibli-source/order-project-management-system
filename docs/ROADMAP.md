@@ -24,8 +24,10 @@ begins.
   Service tickets, AMC schedules, customer ticket-raising via their project
   login, Company Owner visibility into open/overdue tickets.
 - [ ] **Phase 5 — AI integration layer**
-  Claude/Gemini/ChatGPT-backed reports, risk advisory, follow-up drafting,
-  monitoring digest.
+  Claude/Gemini/ChatGPT-backed status reports, per-order risk advisory
+  (Sales Manager + PC + Company Owner), portfolio-level pattern advisory
+  for the Company Owner (which PC/Sales Manager/supplier needs attention),
+  follow-up drafting, monitoring digest.
 - [ ] **Phase 6 — Bluehost deployment**
   cPanel MySQL DB, PHP deployment, static frontend build, SSL, cron jobs,
   go-live.

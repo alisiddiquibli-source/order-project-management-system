@@ -156,7 +156,7 @@ portfolio.
 
 | Role | Assigned how | Scope |
 |------|--------------|-------|
-| **Company Owner** | One login per person; role-based, not per-order | Read access to **all** orders and financials, portfolio-level view (active orders, delays, open service tickets). No data entry. |
+| **Company Owner** | One login per person; role-based, not per-order | **Full visibility across the entire portfolio.** Every order, every stage/milestone/FAT-SAT/shipment/document/service ticket, financials, plus who's assigned where — which Sales Manager and which Project Coordinator own each project, and how each is performing. Gets every deadline/at-risk alert and AI advisory, at portfolio scope, for every order — not just a digest. No data entry. |
 | **Sales Manager** | One login per person; assigned to N orders as `sales_manager_id` | **Primary accountable custodian of the order.** Full read visibility into everything on their assigned order(s) — every stage, milestone, FAT/SAT result and punch list, shipment, document, and service ticket — plus comment/direct-instruction rights to the Project Coordinator. Gets every deadline/at-risk alert and AI advisory for their order(s). Doesn't enter stage data directly; directs the PC, who remains the sole data-entry point. BLI has multiple Sales Managers, each with their own set of orders. |
 | **Project Coordinator** | One login per person; assigned to N orders as `project_coordinator_id` | Full read/write on every order they're assigned to: creates the order, updates all 12 stages + documents + shipments. The operational executor, accountable to that order's Sales Manager. BLI has multiple PCs — each order has exactly one, each PC can hold many orders. |
 | **Import Manager** | One login per person; global advisory role (not tied to specific orders) | Read access to all orders; comments on stages 6–8 (shipment, customs, delivery) jointly with the Project Coordinator and Sales Manager, only when the customer's import team needs input. No stage-status edit rights. |
@@ -168,17 +168,22 @@ portfolio.
 owner of the outcome** — the Project Coordinator, Import Manager (when
 advising), and Installation & Service Engineer are all effectively
 reporting to that order's Sales Manager, even though they sit in different
-functional teams administratively. This is an accountability/visibility
-relationship, not a data-entry one: it doesn't change who's allowed to
-write what (the rules below are unchanged) — it changes who the system
-proactively surfaces information, alerts, and AI-generated recommendations
-to, and who's expected to direct corrective action when something's off
-track.
+functional teams administratively. The **Company Owner sits above all of
+it**, with the same full-visibility treatment applied portfolio-wide rather
+than per-order: every project, and who its Sales Manager and Project
+Coordinator are, and how each of them is tracking (on schedule, delayed,
+recurring risk patterns). This is an accountability/visibility relationship,
+not a data-entry one: it doesn't change who's allowed to write what (the
+rules below are unchanged) — it changes who the system proactively surfaces
+information, alerts, and AI-generated recommendations to, and who's
+expected to direct corrective action when something's off track.
 
 The **Sales Manager's dashboard** works like the Company Owner's portfolio
 view, but scoped to just their own assigned orders: a one-page status
 roll-up across all their projects, with full stage-level drill-down into
-any one of them.
+any one of them. The **Company Owner's dashboard** is the same idea at full
+scale — every order, every Sales Manager's and PC's book of work, and
+AI-generated advisories surfaced right there, not buried in a digest email.
 
 Every API request is authorized server-side against the requesting user's
 actual scope — never by trusting an order ID passed from the client alone:
@@ -277,21 +282,27 @@ Use cases:
   Primary destination is the **Sales Manager's dashboard**, one per assigned
   project; the Company Owner gets the same kind of summary rolled up across
   the whole portfolio.
-- **Risk advisory** — flags stages at risk and recommends a specific next
-  action (e.g., "FAT readiness marked complete but shipment not yet booked —
-  confirm freight booking with supplier"), surfaced jointly to the **Sales
-  Manager** (the accountable decision-maker) and the **Project Coordinator**
-  (who executes it). This is the core of what the Sales Manager asked for:
-  the system, not just the PC, tells him what needs attention. Complements,
-  not replaces, the deterministic deadline alerts in §3.4 — the cron job
-  always fires on dates; the AI layer adds judgment calls a date threshold
-  can't (e.g., reading punch-list severity, spotting a stage that's
-  technically on-schedule but trending wrong).
+- **Risk advisory (per order)** — flags stages at risk and recommends a
+  specific next action (e.g., "FAT readiness marked complete but shipment
+  not yet booked — confirm freight booking with supplier"), surfaced to the
+  **Sales Manager** (accountable decision-maker), the **Project Coordinator**
+  (who executes it), and the **Company Owner** (same advisory, visible on
+  that order from their portfolio view too — nothing is hidden from them).
+  Complements, not replaces, the deterministic deadline alerts in §3.4 — the
+  cron job always fires on dates; the AI layer adds judgment calls a date
+  threshold can't (e.g., reading punch-list severity, spotting a stage
+  that's technically on-schedule but trending wrong).
+- **Portfolio advisory (Company Owner only)** — beyond single-order flags,
+  scans across the whole portfolio for patterns a per-order view can't show:
+  a Project Coordinator with multiple orders trending delayed, a supplier
+  whose FAT results keep failing/conditional-passing, a Sales Manager whose
+  book of projects is disproportionately at risk. Surfaced on the Owner's
+  dashboard as "where to look first."
 - **Follow-up drafting** — draft a follow-up comment/message to a
   supplier/customer based on current stage status.
 - **Monitoring digest** — scheduled (cron) scan across active orders and open
-  service tickets, emailing a daily digest to Company Owners and, per order,
-  its Sales Manager and Project Coordinator.
+  service tickets, emailing a daily digest to Company Owners (portfolio-wide)
+  and, per order, its Sales Manager and Project Coordinator.
 
 Rules:
 - API keys live server-side only (`.env`, outside the web root) — never sent
