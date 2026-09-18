@@ -250,3 +250,43 @@ export interface AiReport {
   created_by: number | null
   created_at: string
 }
+
+export interface Shipment {
+  id: number
+  order_id: number
+  carrier: string | null
+  mode: 'sea' | 'air' | 'road' | null
+  port_of_loading: string | null
+  port_of_discharge: string | null
+  bl_awb_number: string | null
+  etd: string | null
+  eta: string | null
+  actual_dispatch_date: string | null
+  customs_status: string | null
+  notes: string | null
+}
+
+export interface CustomerImportTrackingUpdate {
+  id: number
+  customer_import_tracking_id: number
+  status: string
+  note: string | null
+  reported_at: string
+  recorded_by: number
+}
+
+export interface CustomerImportTracking {
+  id: number
+  order_stage_id: number
+  customer_contact_name: string | null
+  customer_contact_email: string | null
+  customer_contact_phone: string | null
+  latest_status: string | null
+  outstanding_documents: string | null
+  expected_date: string | null
+  next_follow_up_date: string | null
+  import_manager_engaged_at: string | null
+  import_manager_disengaged_at: string | null
+  notes: string | null
+  history?: CustomerImportTrackingUpdate[]
+}

@@ -2,8 +2,10 @@ import { AcceptanceSection } from './AcceptanceSection'
 import { DocumentsSection } from './DocumentsSection'
 import { EngineerReportSection } from './EngineerReportSection'
 import { FatSatSection } from './FatSatSection'
+import { ImportTrackingSection } from './ImportTrackingSection'
 import { MilestonesSection } from './MilestonesSection'
 import { RequirementsSection } from './RequirementsSection'
+import { ShipmentSection } from './ShipmentSection'
 import { TrainingSection } from './TrainingSection'
 import type { OrderStage } from '../lib/types'
 
@@ -11,10 +13,9 @@ import type { OrderStage } from '../lib/types'
  * Dispatches to the right evidence sub-form(s) for a stage
  * (docs/ARCHITECTURE.md §3.1/§3.2 — this mirrors StageCompletionEvaluator's
  * per-stage evidence checks, so what's shown here is exactly what the
- * server will actually gate completion on). Stages 4, 6, and 7 have no
- * dedicated sub-form yet: 4 is satisfied by the PC note already on the
- * stage (see StageUpdateForm), 6/7 need a shipment/import-tracking UI
- * that hasn't been built (docs/ROADMAP.md).
+ * server will actually gate completion on). Stage 4 has no dedicated
+ * sub-form: it's satisfied by the PC note already on the stage (see
+ * StageUpdateForm).
  */
 export function StageEvidence({ orderId, stage }: { orderId: number; stage: OrderStage }) {
   const orderStageId = stage.id
@@ -34,8 +35,17 @@ export function StageEvidence({ orderId, stage }: { orderId: number; stage: Orde
           <AcceptanceSection orderId={orderId} orderStageId={orderStageId} stageId={stageId} type="fat_conditional" targetTable="fat_sat_record" />
         </div>
       )
+    case 6:
+      return <ShipmentSection orderId={orderId} />
+    case 7:
+      return <ImportTrackingSection orderId={orderId} stageId={stageId} />
     case 8:
-      return <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="delivery_note" title="Delivery documents" />
+      return (
+        <div className="space-y-3">
+          <ImportTrackingSection orderId={orderId} stageId={stageId} />
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="delivery_note" title="Delivery documents" />
+        </div>
+      )
     case 9:
       return <EngineerReportSection orderId={orderId} stageId={stageId} type="installation" title="Installation report" />
     case 10:

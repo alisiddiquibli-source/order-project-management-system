@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AiReportsPanel } from '../components/AiReportsPanel'
+import { AmcSection } from '../components/AmcSection'
 import { AppShell } from '../components/AppShell'
 import { CommentsPanel } from '../components/CommentsPanel'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
@@ -99,6 +100,12 @@ export function OrderDetailPage() {
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ServiceTicketsPanel orderId={order.id} />
           <CommentsPanel orderId={order.id} />
+        </div>
+      )}
+
+      {order && (
+        <div className="mt-4">
+          <AmcSection orderId={order.id} />
         </div>
       )}
 

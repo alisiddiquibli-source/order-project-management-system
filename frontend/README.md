@@ -33,9 +33,13 @@ locally, or adjust the proxy target.
   backend's `StageCompletionEvaluator`: `RequirementsSection`,
   `DocumentsSection` (also the download path — `downloadDocument()` in
   `api.ts`, since a plain `<a href>` can't attach the JWT), `MilestonesSection`,
-  `FatSatSection` (+ nested punch-list management), `EngineerReportSection`,
-  `TrainingSection`, `AcceptanceSection` (auto-selects the one current
-  eligible target record rather than asking the user to pick).
+  `FatSatSection` (+ nested punch-list management), `ShipmentSection`
+  (stage 6 — booking + "mark dispatched today"), `ImportTrackingSection`
+  (stages 7/8, shared component parameterized by `stageId`),
+  `EngineerReportSection`, `TrainingSection`, `AcceptanceSection`
+  (auto-selects the one current eligible target record rather than
+  asking the user to pick). `AmcSection` — order-level, not stage-scoped
+  — Engineer-only AMC contract creation and visit scheduling/completion.
   `AiReportsPanel` (docs/ARCHITECTURE.md §10) — generate button + the
   acknowledge/dismiss/action lifecycle, reused at order scope (order
   detail page), project scope (Sales Manager's dashboard, one panel per
@@ -59,18 +63,20 @@ Built: login, all seven role dashboards, order detail with live stage
 status updates (the real write path, not a mockup — business-rule
 rejections from the API are shown to the user verbatim), a comments
 panel, a service-tickets panel (raise/advance/confirm-closure), the full
-set of per-stage evidence sub-forms, and the AI advisory UI (risk
-advisory, project status reports, portfolio advisory, follow-up
-drafting). A fresh order has been walked through all 12 stages via the
-real UI end-to-end, across PC/Sales Manager/Engineer/Customer logins —
-see `../docs/ROADMAP.md` for what that caught. The AI UI was verified
-with a two-Sales-Manager fixture confirming one SM never sees another's
-reports, and confirming a drafted follow-up never auto-posts.
+set of per-stage evidence sub-forms (now including shipment and
+import-tracking screens for stages 6-8), the order-level AMC
+contract/visit UI, and the AI advisory UI (risk advisory, project status
+reports, portfolio advisory, follow-up drafting). A fresh order has been
+walked through all 12 stages via the real UI end-to-end, across PC/Sales
+Manager/Engineer/Customer logins — see `../docs/ROADMAP.md` for what that
+caught. The AI UI was verified with a two-Sales-Manager fixture
+confirming one SM never sees another's reports, and confirming a drafted
+follow-up never auto-posts. The AMC/shipment/import-tracking screens were
+verified in a separate round, live against a real server: booking and
+dispatching a shipment, creating and progressing import tracking through
+stages 7-8, and creating an AMC contract and completing a visit — all
+through the UI.
 
-Pending: AMC contract/visit management screens and shipment/import-
-tracking screens for stages 6-8 (both API-complete, UI-absent — the
-12-stage walk had to fast-forward those three stages with direct
-database writes instead of through the UI); a proper Playwright e2e
-suite (each round's verification has been a manually-run script against
-a live backend, not committed — it needs seed-data fixtures to become a
-real repeatable suite).
+Pending: a proper Playwright e2e suite (each round's verification has
+been a manually-run script against a live backend, not committed — it
+needs seed-data fixtures to become a real repeatable suite).

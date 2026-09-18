@@ -302,16 +302,36 @@ separation of concerns:
 - `src/components/StageEvidence.tsx` — dispatches to the right evidence
   sub-form(s) for a stage by `stage_id`
   (`RequirementsSection`/`DocumentsSection`/`MilestonesSection`/
-  `FatSatSection`/`EngineerReportSection`/`TrainingSection`/
-  `AcceptanceSection`), deliberately mirroring
-  `StageCompletionEvaluator`'s own per-stage checks — what the UI asks
-  for filling in should always be exactly what the server gates
-  completion on. `AcceptanceSection` auto-selects the current eligible
-  target record (the live FAT/SAT attempt, latest training record,
-  latest handover-readiness report) rather than offering a picker —
-  there's only ever one live candidate. Stages 6-8 have no sub-form yet
-  (shipment/import-tracking UI doesn't exist); stage 4 needs no sub-form
-  at all — it's satisfied by the note already on `StageUpdateForm`.
+  `FatSatSection`/`ShipmentSection`/`ImportTrackingSection`/
+  `EngineerReportSection`/`TrainingSection`/`AcceptanceSection`),
+  deliberately mirroring `StageCompletionEvaluator`'s own per-stage
+  checks — what the UI asks for filling in should always be exactly what
+  the server gates completion on. `AcceptanceSection` auto-selects the
+  current eligible target record (the live FAT/SAT attempt, latest
+  training record, latest handover-readiness report) rather than
+  offering a picker — there's only ever one live candidate.
+  `ImportTrackingSection` is shared by stages 7 and 8 (same
+  per-`order_stage` `customer_import_tracking` record, parameterized by
+  `stageId` so each stage's UI names the `latest_status` value it
+  completes on — `cleared`/`delivered`); stage 8 renders it alongside
+  `DocumentsSection`, since the backend accepts both as stage-8 evidence.
+  Stage 4 needs no sub-form at all — it's satisfied by the note already
+  on `StageUpdateForm`.
+- `src/components/ShipmentSection.tsx` — stage 6 evidence: lists
+  shipments, a PC-only booking form (carrier/mode/ETD/ETA), and a "mark
+  dispatched today" action that PATCHes `actual_dispatch_date` — the
+  field stage 6 completion actually gates on, set separately from
+  booking since a carrier is usually booked well before the machine
+  actually ships.
+- `src/components/ImportTrackingSection.tsx` — stages 7/8 evidence: shows
+  the current tracking record plus its append-only status history, or a
+  "start tracking" form if none exists yet; PC-only status updates.
+  Distinguishes `tracking === undefined` (not loaded yet) from
+  `tracking === null` (loaded, no record exists) as the "loading" gate.
+- `src/components/AmcSection.tsx` — order-level (not stage-scoped) AMC
+  contract/visit UI: Engineer-only contract creation
+  (start/end date + frequency) and per-contract visit
+  scheduling/completion, alongside the existing due-visits view.
   When adding a stage's evidence UI, check evidence.php first for a GET
   list route — several existed only as `listForStage()`/`listForOrder()`
   repository methods with no route exposing them until this pass added

@@ -217,16 +217,29 @@ begins.
   `AiReportsPanel`, reused at order/project/portfolio scope, plus a
   "Draft with AI" button in `CommentsPanel` that only ever fills the
   message box — verified live that it never posts on its own.
-  Pending: AMC contract/visit management screens (the Engineer can see
-  due visits but not yet create a contract or log one from the UI — the
-  API exists, `AmcContractRepository` + `src/routes/service.php`, just not
-  wired into a form yet); shipment/import-tracking screens for stages
-  6-8 (also API-complete, UI-absent — this round's evidence walk had to
-  fast-forward those three stages with direct evidence writes rather than
-  through the UI); a committed Playwright e2e suite with real seed
-  fixtures (every verification pass so far, including this round's
-  12-stage walk, has been a manually-run script, not committed as-is — it
-  needs to become a real repeatable suite).
+  **AMC and shipment/import-tracking screens are now built too**:
+  `ShipmentSection` (stage 6 — carrier/mode/ETD/ETA booking, PC-only, plus
+  a "mark dispatched today" action that sets `actual_dispatch_date`, the
+  field stage 6 completion actually gates on), `ImportTrackingSection`
+  (stages 7 and 8 — shared component parameterized by `stageId`, since
+  both stages read the same per-`order_stage` `customer_import_tracking`
+  record; shows the append-only status history and flags which
+  `latest_status` value each stage completes on — `cleared` for 7,
+  `delivered` for 8), and `AmcSection` (order-level, not stage-scoped —
+  contract creation and visit scheduling/completion, Engineer-only,
+  mirroring the AMC/service module's existing due-visits view). Stage 8
+  now shows both `ImportTrackingSection` and the existing delivery-
+  documents `DocumentsSection`, since the backend treats both as
+  legitimate stage-8 evidence. Verified end-to-end against a live server
+  (fresh MariaDB test DB, seeded fixtures, PHP built-in server + Vite dev
+  server, a Playwright script): booked and dispatched a shipment, created
+  and progressed import tracking through stage 7 into stage 8, and
+  created an AMC contract, scheduled a visit, and marked it visited — all
+  through the real UI, not direct API calls.
+  Pending: a committed Playwright e2e suite with real seed fixtures
+  (every verification pass so far, including this round's, has been a
+  manually-run script, not committed as-is — it needs to become a real
+  repeatable suite).
 - [ ] **Phase 6 — Bluehost deployment**
   cPanel MySQL DB, PHP deployment, static frontend build, SSL, both cron
   jobs (daily + hourly), go-live.
@@ -260,13 +273,15 @@ stage-lookup notes) — caught precisely because testing went beyond the
 first happy path.
 
 Frontend — all seven role dashboards exist, plus a comments panel, a
-service-tickets panel, and now the full set of per-stage evidence
-sub-forms on the order detail page. A fresh order was walked through all
-12 stages via the real UI end-to-end (see Phase 4/frontend notes above),
-catching a genuine backend bug (a notes+completion race in the same
-request) and two UI text collisions along the way. Next frontend work:
-AMC/shipment/import-tracking screens (API-complete, UI-absent) and a
-committed e2e suite.
+service-tickets panel, the full set of per-stage evidence sub-forms
+(including AMC, shipment, and import-tracking screens for stages 6-8, the
+last ones that were UI-absent) on the order detail page, and the AI
+advisory UI. A fresh order was walked through all 12 stages via the real
+UI end-to-end (see Phase 4/frontend notes above), catching a genuine
+backend bug (a notes+completion race in the same request) and two UI text
+collisions along the way. Next frontend work: a committed e2e suite (the
+one remaining gap — every verification pass so far has been a
+manually-run script).
 
 Phase 3a (shipment/customs API) — complete; every core-pipeline stage
 (1–12) is now reachable through a real, tested API endpoint, none left
@@ -304,7 +319,11 @@ plus "Draft with AI" in `CommentsPanel`) was added right after Phase 5's
 backend, verified live including that a drafted follow-up never posts
 itself — a human still has to click Post.
 
-Not yet started: Phase 6 (Bluehost deployment), and the remaining
-frontend work — AMC contract/visit creation screens, shipment/import-
-tracking screens for stages 6-8 (both API-complete, UI-absent), and a
-committed Playwright e2e suite.
+AMC contract/visit creation screens and shipment/import-tracking screens
+for stages 6-8 were added right after (`AmcSection`, `ShipmentSection`,
+`ImportTrackingSection`), verified live against a real server as
+described above — the frontend now has a dedicated evidence UI for all
+12 stages plus the order-level AMC module.
+
+Not yet started: Phase 6 (Bluehost deployment), and a committed
+Playwright e2e suite.
