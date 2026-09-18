@@ -132,6 +132,18 @@ begins.
   fixture this round specifically added — that Sales Manager A can never
   see, generate against, or acknowledge Sales Manager B's project/order
   reports, and vice versa.
+  **Frontend added in the same pass**: `AiReportsPanel` (generate button +
+  the acknowledge/dismiss/action lifecycle, reused at all three scopes) on
+  the order detail page (risk advisory), the Sales Manager's dashboard
+  (one panel per project they manage, status reports), and the Owner's
+  dashboard (portfolio advisory); a "Draft with AI" button in
+  `CommentsPanel` for Sales Manager/PC that fills the message box from a
+  follow-up draft — **it only ever fills the box, never posts** — a human
+  still has to click Post themselves. Verified live, including the one
+  check that mattered most here: clicking "Draft with AI" did not create
+  a comment (confirmed by checking the thread before the explicit Post
+  click), and the two-SM fixture's isolation held in the UI too — SM2's
+  dashboard never renders SM1's project number anywhere on the page.
 - [~] **Frontend** (not one of the numbered backend phases — tracked
   alongside them)
   React + TypeScript + Vite + Tailwind. Built: login, JWT handling with
@@ -201,6 +213,10 @@ begins.
   shared exact text with the always-visible "raise a ticket" form, and the
   FAT/SAT record-result button was labeled "Save" — identical to the
   stage-status form's own "Save" button rendered right next to it.
+  **AI advisory UI is now built too** (see the Phase 5 entry above):
+  `AiReportsPanel`, reused at order/project/portfolio scope, plus a
+  "Draft with AI" button in `CommentsPanel` that only ever fills the
+  message box — verified live that it never posts on its own.
   Pending: AMC contract/visit management screens (the Engineer can see
   due visits but not yet create a contract or log one from the UI — the
   API exists, `AmcContractRepository` + `src/routes/service.php`, just not
@@ -283,8 +299,12 @@ for what that covered, including a schema gap found and fixed
 (`ai_reports` needed its own `project_id` column) and a two-Sales-Manager
 scoping test that confirmed one SM can't see or act on another's reports.
 
+The AI advisory UI (`AiReportsPanel` at order/project/portfolio scope,
+plus "Draft with AI" in `CommentsPanel`) was added right after Phase 5's
+backend, verified live including that a drafted follow-up never posts
+itself — a human still has to click Post.
+
 Not yet started: Phase 6 (Bluehost deployment), and the remaining
 frontend work — AMC contract/visit creation screens, shipment/import-
-tracking screens for stages 6-8 (both API-complete, UI-absent), an AI
-advisory UI (every Phase 5 endpoint so far has only been exercised via
-curl, not through the frontend), and a committed Playwright e2e suite.
+tracking screens for stages 6-8 (both API-complete, UI-absent), and a
+committed Playwright e2e suite.

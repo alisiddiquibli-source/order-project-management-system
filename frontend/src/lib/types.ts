@@ -231,3 +231,22 @@ export interface Acceptance {
   conditions_notes: string | null
   accepted_at: string
 }
+
+export type AiReportType = 'order_risk_advisory' | 'project_status_report' | 'portfolio_advisory' | 'follow_up_draft' | 'daily_digest'
+export type AiReportStatus = 'new' | 'acknowledged' | 'dismissed' | 'actioned'
+
+export interface AiReport {
+  id: number
+  order_id: number | null
+  project_id: number | null
+  type: AiReportType
+  provider: 'claude' | 'gemini' | 'chatgpt'
+  prompt: string
+  response: string
+  status: AiReportStatus
+  acknowledged_by: number | null
+  acknowledged_at: string | null
+  action_notes: string | null
+  created_by: number | null
+  created_at: string
+}

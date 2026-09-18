@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { AiReportsPanel } from '../components/AiReportsPanel'
 import { AppShell } from '../components/AppShell'
 import { CommentsPanel } from '../components/CommentsPanel'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
@@ -7,23 +8,26 @@ import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import type { Order, OrderStage } from '../lib/types'
+import type { AiReport, Order, OrderStage } from '../lib/types'
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
   const [stages, setStages] = useState<OrderStage[] | null>(null)
+  const [aiReports, setAiReports] = useState<AiReport[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expandedStageId, setExpandedStageId] = useState<number | null>(null)
 
   async function reload() {
-    const [orderData, stagesData] = await Promise.all([
+    const [orderData, stagesData, aiReportsData] = await Promise.all([
       api.get<Order>(`/orders/${id}`),
       api.get<OrderStage[]>(`/orders/${id}/stages`),
+      api.get<AiReport[]>('/ai-reports'),
     ])
     setOrder(orderData)
     setStages(stagesData)
+    setAiReports(aiReportsData.filter((r) => r.order_id === orderData.id))
   }
 
   useEffect(() => {
@@ -32,6 +36,7 @@ export function OrderDetailPage() {
   }, [id])
 
   const canEditStages = user?.role === 'project_coordinator'
+  const canGenerateRiskAdvisory = user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role)
 
   return (
     <AppShell title={order ? `${order.order_number} · ${order.machine_name}` : 'Order'}>
@@ -94,6 +99,19 @@ export function OrderDetailPage() {
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ServiceTicketsPanel orderId={order.id} />
           <CommentsPanel orderId={order.id} />
+        </div>
+      )}
+
+      {order && (
+        <div className="mt-4">
+          <AiReportsPanel
+            title="AI risk advisory"
+            reports={aiReports}
+            canGenerate={!!canGenerateRiskAdvisory}
+            generateLabel="Generate risk advisory"
+            onGenerate={() => api.post(`/orders/${order.id}/ai/risk-advisory`).then(reload)}
+            onChanged={reload}
+          />
         </div>
       )}
     </AppShell>

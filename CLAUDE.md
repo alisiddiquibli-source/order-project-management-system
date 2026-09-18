@@ -317,6 +317,17 @@ separation of concerns:
   repository methods with no route exposing them until this pass added
   six (`requirements`, `milestones`, `fat-sat`, `punch-items`,
   `engineer-reports`, `training`, `acceptances`).
+- `src/components/AiReportsPanel.tsx` — generate button + the
+  acknowledge/dismiss/action lifecycle for `ai_reports` (docs/ARCHITECTURE.md
+  §10), reused at order/project/portfolio scope. The parent owns fetching
+  (each scope hits a different generate endpoint) and passes the already-
+  scoped list plus a generate callback; this only renders it and drives
+  `PATCH /api/ai-reports/{id}`, which is the same regardless of scope.
+  `CommentsPanel`'s "Draft with AI" button (Sales Manager/PC only) is the
+  one other AI-facing bit of UI — it calls the follow-up-draft endpoint
+  and fills the message box, **never posts on its own**; keep it that
+  way if you touch it — advisory-only is a hard requirement (§10), not a
+  default that can quietly become "auto-post if the draft looks fine."
 - `src/pages/` — one file per role's home view (`OwnerDashboardPage`,
   `SalesManagerDashboardPage`, `CoordinatorDashboardPage`,
   `ImportManagerDashboardPage`, `EngineerDashboardPage`,

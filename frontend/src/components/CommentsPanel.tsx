@@ -22,11 +22,13 @@ export function CommentsPanel({ orderId }: { orderId: number }) {
   const [message, setMessage] = useState('')
   const [channel, setChannel] = useState<CommentChannel>('internal')
   const [submitting, setSubmitting] = useState(false)
+  const [drafting, setDrafting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const canPickChannel = user
     ? !['customer', 'supplier'].includes(user.role)
     : false
+  const canDraftWithAi = user ? ['sales_manager', 'project_coordinator'].includes(user.role) : false
 
   async function reload() {
     setComments(await api.get<Comment[]>(`/orders/${orderId}/comments`))
@@ -52,6 +54,24 @@ export function CommentsPanel({ orderId }: { orderId: number }) {
       setError(err instanceof ApiError ? err.message : 'Could not post your comment.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  /**
+   * Drafts into the message box — never posts on its own. AI output here
+   * is advisory only (docs/ARCHITECTURE.md §10): a human still reviews
+   * and clicks Post themselves, same as typing it by hand.
+   */
+  async function handleDraftWithAi() {
+    setDrafting(true)
+    setError(null)
+    try {
+      const report = await api.post<{ response: string }>(`/orders/${orderId}/ai/follow-up-draft`, { channel })
+      setMessage(report.response)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not draft a follow-up.')
+    } finally {
+      setDrafting(false)
     }
   }
 
@@ -99,6 +119,17 @@ export function CommentsPanel({ orderId }: { orderId: number }) {
           onKeyDown={(e) => e.key === 'Enter' && handlePost()}
           className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
+        {canDraftWithAi && (
+          <button
+            type="button"
+            onClick={handleDraftWithAi}
+            disabled={drafting}
+            title="Draft a follow-up with AI — fills the box below, doesn't post"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+          >
+            {drafting ? 'Drafting…' : 'Draft with AI'}
+          </button>
+        )}
         <button
           type="button"
           onClick={handlePost}

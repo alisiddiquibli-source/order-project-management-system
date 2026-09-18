@@ -36,6 +36,15 @@ locally, or adjust the proxy target.
   `FatSatSection` (+ nested punch-list management), `EngineerReportSection`,
   `TrainingSection`, `AcceptanceSection` (auto-selects the one current
   eligible target record rather than asking the user to pick).
+  `AiReportsPanel` (docs/ARCHITECTURE.md §10) — generate button + the
+  acknowledge/dismiss/action lifecycle, reused at order scope (order
+  detail page), project scope (Sales Manager's dashboard, one panel per
+  project), and portfolio scope (Owner's dashboard); the parent owns
+  fetching since each scope hits a different endpoint, this only renders
+  the list and drives `PATCH /api/ai-reports/{id}`. `CommentsPanel` also
+  gets a "Draft with AI" button (Sales Manager/PC only) that fills the
+  message box from a follow-up draft — it never posts on its own, a human
+  still clicks Post.
 - `src/pages/` — one file per route. Each of the seven roles gets its own
   home view (`OwnerDashboardPage`, `SalesManagerDashboardPage`,
   `CoordinatorDashboardPage`, `ImportManagerDashboardPage`,
@@ -49,11 +58,14 @@ locally, or adjust the proxy target.
 Built: login, all seven role dashboards, order detail with live stage
 status updates (the real write path, not a mockup — business-rule
 rejections from the API are shown to the user verbatim), a comments
-panel, a service-tickets panel (raise/advance/confirm-closure), and the
-full set of per-stage evidence sub-forms. A fresh order has been walked
-through all 12 stages via the real UI end-to-end, across PC/Sales
-Manager/Engineer/Customer logins — see `../docs/ROADMAP.md` for what
-that caught.
+panel, a service-tickets panel (raise/advance/confirm-closure), the full
+set of per-stage evidence sub-forms, and the AI advisory UI (risk
+advisory, project status reports, portfolio advisory, follow-up
+drafting). A fresh order has been walked through all 12 stages via the
+real UI end-to-end, across PC/Sales Manager/Engineer/Customer logins —
+see `../docs/ROADMAP.md` for what that caught. The AI UI was verified
+with a two-Sales-Manager fixture confirming one SM never sees another's
+reports, and confirming a drafted follow-up never auto-posts.
 
 Pending: AMC contract/visit management screens and shipment/import-
 tracking screens for stages 6-8 (both API-complete, UI-absent — the
