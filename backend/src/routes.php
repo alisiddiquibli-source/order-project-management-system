@@ -12,3 +12,4 @@ require __DIR__ . '/routes/evidence.php';
 require __DIR__ . '/routes/comments.php';
 require __DIR__ . '/routes/logistics.php';
 require __DIR__ . '/routes/service.php';
+require __DIR__ . '/routes/ai.php';

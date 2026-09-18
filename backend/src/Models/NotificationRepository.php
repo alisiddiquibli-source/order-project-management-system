@@ -162,6 +162,7 @@ final class NotificationRepository
             'ticket_opened' => 'BLI system: new service ticket',
             'ticket_response_overdue' => 'BLI system: service ticket response SLA breached',
             'ticket_resolution_overdue' => 'BLI system: service ticket resolution SLA breached',
+            'ai_daily_digest' => 'BLI system: your daily AI digest is ready',
             default => 'BLI system notification',
         };
     }

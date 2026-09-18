@@ -86,12 +86,52 @@ begins.
   not a figure given in the design doc — a caller can override per ticket,
   but the defaults themselves should be sanity-checked against what BLI
   actually commits to customers before go-live.
-- [ ] **Phase 5 — AI integration layer**
-  Status reports, per-order risk advisory, portfolio pattern advisory
-  attributed by `blockers.responsible_party` (not raw counts), the
-  acknowledge/dismiss/action lifecycle on `ai_reports`, follow-up
-  drafting, monitoring digest. Scope filter enforced in the data-gathering
-  layer, not the caller.
+- [x] **Phase 5 — AI integration layer**
+  `Bli\Ai\AiAdvisorService` orchestrates all four use cases (order risk
+  advisory, project status reports, portfolio advisory, follow-up
+  drafting) through one path: gather scoped facts -> render a prompt ->
+  call the configured provider adapter (`ClaudeAdapter`/`GeminiAdapter`/
+  `ChatGptAdapter`, picked by `AI_DEFAULT_PROVIDER`) -> persist to
+  `ai_reports`. **The scope filter lives in `Bli\Domain\AiDataGatherer`,
+  not the route or the caller** — every method re-authorizes from the
+  requester's own claims exactly like any other read, and portfolio
+  advisory is gated Owner-only inside the gatherer itself, independent of
+  the route's own role check. Portfolio advisory attributes risk by
+  `blockers.responsible_party` per project (never a raw count, never "who
+  typed the entry") — verified live: a blocker seeded with
+  `responsible_party='customer'` came back attributed to "customer" in
+  the generated advisory, not blamed on the project's PC.
+  **Schema gap found and fixed before building on it**: `ai_reports` had
+  no way to scope a project-level status report to that project's own
+  Sales Manager/PC — only `order_id` (one order) and "both NULL"
+  (portfolio, Owner-only) existed, even though §10 explicitly names
+  "Sales Manager's per-project dashboard" as its own use case. Added a
+  nullable `project_id` column with its own FK/index rather than
+  overloading `order_id` or collapsing it into the portfolio bucket.
+  The acknowledge/dismiss/action lifecycle is on `AiReportRepository::updateStatus()`;
+  `GET /api/ai-reports` and `PATCH /api/ai-reports/{id}` are scoped by
+  report kind (order-scope, project-scope, or Owner-only for portfolio),
+  run as three separate queries rather than one merged query — order and
+  project scope use different table aliases in `Bli\Auth\Scope`, and
+  forcing them into one query meant alias collisions or fragile string
+  surgery to avoid them.
+  The daily digest (`cron/check_ai_digest.php` + `AiDigestScanner`): one
+  status report per active project (notifying that project's SM/PC) plus
+  one portfolio advisory (notifying every Owner) — a provider failure on
+  one project doesn't stop the rest, same pattern as `DeadlineScanner`/
+  `TicketSlaScanner`. **Cost note for BLI**: this cron makes one AI
+  provider call per active project plus one portfolio call, every day —
+  a real recurring cost to confirm is acceptable before enabling it in
+  production.
+  Verified end-to-end against a live server with a local mock of
+  Anthropic's Messages API (same technique as the SMTP debug server in
+  Phase 3b) standing in for the real provider, since no production API
+  key exists yet: all four on-demand use cases, the digest cron, the
+  acknowledge lifecycle, a missing-API-key failure returning 502 with no
+  garbage row written to `ai_reports`, and — the two-Sales-Manager
+  fixture this round specifically added — that Sales Manager A can never
+  see, generate against, or acknowledge Sales Manager B's project/order
+  reports, and vice versa.
 - [~] **Frontend** (not one of the numbered backend phases — tracked
   alongside them)
   React + TypeScript + Vite + Tailwind. Built: login, JWT handling with
@@ -236,7 +276,15 @@ testing: the new `/api/amc-visits/due` route initially called
 `requireRole()` without `requireAuth()` first, which made every request
 (including the Company Owner's own) 403 — fixed and re-verified.
 
-Not yet started: Phase 5 (AI layer), Phase 6 (deployment), and the
-remaining frontend work (five role dashboards, evidence sub-forms, and
-now the Phase 3b/4 UI: comments already have a UI, but AMC/service-ticket
-screens don't exist yet).
+Phase 5 (AI layer) — complete; verified end-to-end against a live server
+using a local mock of the Anthropic Messages API standing in for the real
+provider (no production API key exists yet). See the Phase 5 entry above
+for what that covered, including a schema gap found and fixed
+(`ai_reports` needed its own `project_id` column) and a two-Sales-Manager
+scoping test that confirmed one SM can't see or act on another's reports.
+
+Not yet started: Phase 6 (Bluehost deployment), and the remaining
+frontend work — AMC contract/visit creation screens, shipment/import-
+tracking screens for stages 6-8 (both API-complete, UI-absent), an AI
+advisory UI (every Phase 5 endpoint so far has only been exercised via
+curl, not through the frontend), and a committed Playwright e2e suite.

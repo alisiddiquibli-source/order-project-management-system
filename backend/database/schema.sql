@@ -591,7 +591,13 @@ CREATE TABLE notifications (
 
 CREATE TABLE ai_reports (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    order_id        INT UNSIGNED NULL,  -- NULL for portfolio-level advisory
+    order_id        INT UNSIGNED NULL,  -- set for order-level risk advisory / follow-up drafts
+    -- set for a project-level status report (§10) — distinct from order_id
+    -- (one order) and from "both NULL" (portfolio-wide, Owner-only): a
+    -- project status report is scoped to that project's Sales Manager/PC,
+    -- and without its own column it would either leak into the portfolio
+    -- bucket or have no way to be scoped to the right people at all.
+    project_id      INT UNSIGNED NULL,
     type            VARCHAR(100) NOT NULL,
     provider        ENUM('claude','gemini','chatgpt') NOT NULL,
     prompt          TEXT NOT NULL,
@@ -603,9 +609,11 @@ CREATE TABLE ai_reports (
     created_by      INT UNSIGNED NULL,  -- NULL when system-generated (cron/digest)
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_ai_reports_order FOREIGN KEY (order_id) REFERENCES orders(id),
+    CONSTRAINT fk_ai_reports_project FOREIGN KEY (project_id) REFERENCES projects(id),
     CONSTRAINT fk_ai_reports_acknowledged_by FOREIGN KEY (acknowledged_by) REFERENCES users(id),
     CONSTRAINT fk_ai_reports_created_by FOREIGN KEY (created_by) REFERENCES users(id),
     INDEX idx_ai_reports_order (order_id),
+    INDEX idx_ai_reports_project (project_id),
     INDEX idx_ai_reports_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

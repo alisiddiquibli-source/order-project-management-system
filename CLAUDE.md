@@ -185,7 +185,11 @@ plan to "prettify later."
   visits), `ServiceTicketRepository` (`advanceStatus()` only ever walks a
   ticket open -> in_progress -> resolved; closing is `confirmClosure()`
   — the customer's own confirmation — or the SLA cron's `autoClose()`,
-  never a status an Engineer can set directly).
+  never a status an Engineer can set directly), `AiReportRepository`
+  (`findVisibleToUser()` runs three separate queries — order-scope,
+  project-scope, portfolio/Owner-only — rather than one merged query,
+  since `Scope::forOrders()`/`forProjects()` use different table aliases
+  and forcing them together meant alias collisions).
   `findByIdForUser()`-style methods return `null` for both "doesn't
   exist" and "not authorized" — routes turn that into a 404, never a 403,
   so existence is never leaked. `DocumentRepository`/`CommentRepository`
@@ -209,8 +213,28 @@ plan to "prettify later."
   daily cron's actual logic — see below), `BusinessHours` (SLA elapsed-time
   math in actual business hours/days, not calendar time — configurable
   window via `BUSINESS_HOURS_START`/`_END`/`BUSINESS_DAYS`), `TicketSlaScanner`
-  (the hourly ticket-SLA cron's logic, using `BusinessHours`). New
-  cross-cutting rules belong here, not scattered across route handlers.
+  (the hourly ticket-SLA cron's logic, using `BusinessHours`),
+  `AiDataGatherer` (§10 — **the scope filter for every AI use case lives
+  here, not the route**; each method re-authorizes from the requester's
+  claims same as any other read, and portfolio advisory is gated
+  Owner-only inside the gatherer itself, independent of the route's own
+  role check; the `*Unscoped()` variants exist only for the digest cron,
+  which has no request claims to check against — never call one of those
+  from a route), `AiDigestScanner` (the daily AI-digest cron's logic).
+  New cross-cutting rules belong here, not scattered across route handlers.
+- `src/Ai/` — the provider-facing half of §10, kept separate from
+  `Domain` because it's one cohesive subsystem (matches the
+  `AiAdvisorService`/`ClaudeAdapter`/`GeminiAdapter`/`ChatGptAdapter`
+  diagram in docs/ARCHITECTURE.md §10): `ProviderAdapter` (the interface
+  every provider implements), `ClaudeAdapter`/`GeminiAdapter`/`ChatGptAdapter`
+  (one HTTP call each, via `HttpJsonClient`; `*_API_BASE_URL` env vars
+  exist only to point an adapter at a local test double, never set in
+  production), `AiAdvisorService` (orchestrates gather -> prompt -> call
+  -> persist for all four use cases, and holds every system/user prompt
+  template — see its `render*Prompt()` methods, which `AiDigestScanner`
+  also calls directly for the cron path). A provider call failure is an
+  `AiProviderException`, turned into a 502 by the route — never a 500,
+  and never a written `ai_reports` row for the failed attempt.
 - `src/Http/` — framework bits (`Router`, `Request` — including
   multipart/`$_FILES` support for document uploads, `Response`) plus
   `OrderAccess`, a shared "load this order/stage or 404" helper (including
@@ -218,9 +242,10 @@ plan to "prettify later."
   `/api/fat-sat/{id}/result` that aren't nested under `/orders/{id}/...`).
 - `src/routes/*.php` — route registration, split by domain
   (`health_and_auth.php`, `projects.php`, `orders.php`, `evidence.php`,
-  `comments.php`, `logistics.php`, `service.php` — AMC + service tickets),
-  required from `src/routes.php`. Keep splitting further before any one
-  file gets unwieldy — that's already why this isn't one big `routes.php`.
+  `comments.php`, `logistics.php`, `service.php` — AMC + service tickets,
+  `ai.php`), required from `src/routes.php`. Keep splitting further
+  before any one file gets unwieldy — that's already why this isn't one
+  big `routes.php`.
 - `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
   logic lives in `src/Domain/DeadlineScanner.php` so it's testable
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
@@ -229,6 +254,11 @@ plan to "prettify later."
 - `cron/check_ticket_sla.php` — same pattern, but **hourly** (a daily scan
   can't catch an hour-level SLA breach in time) and backed by
   `src/Domain/TicketSlaScanner.php`.
+- `cron/check_ai_digest.php` — daily, backed by `src/Domain/AiDigestScanner.php`.
+  **Makes one real AI provider call per active project plus one portfolio
+  call, every day it runs** — confirm that recurring per-call cost is
+  acceptable to BLI before enabling this cron in production, it's not
+  free like the other two crons.
 - `src/Notifications/Mailer.php` — thin PHPMailer/SMTP wrapper, called
   only from `NotificationRepository`. Best-effort by design: catches its
   own exceptions and logs to `error_log`, never throws — a mail-server
