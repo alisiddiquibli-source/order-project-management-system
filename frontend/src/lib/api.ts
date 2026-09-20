@@ -45,7 +45,13 @@ async function request<T>(path: string, options: RequestInit = {}, isRetry = fal
 
   const response = await fetch(`/api${path}`, { ...options, headers })
 
-  if (response.status === 401 && !isRetry) {
+  // Only treat a 401 as "your session expired" when a token was actually
+  // attached — otherwise this is a fresh, unauthenticated request (login
+  // itself, most commonly) and a 401 just means the credentials were
+  // wrong. Without this check, a mistyped password triggered a doomed
+  // refresh attempt, a hard redirect to /login, and a misleading "Session
+  // expired" message instead of the real "Invalid email or password."
+  if (response.status === 401 && !isRetry && token) {
     const refreshed = await tryRefresh()
     if (refreshed) {
       return request<T>(path, options, true)
