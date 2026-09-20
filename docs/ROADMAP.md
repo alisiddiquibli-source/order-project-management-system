@@ -453,11 +453,16 @@ role assignment) and project creation/deletion were added right after
 (docs/ARCHITECTURE.md §7.1) but had never actually been built; this
 closes that gap.
 
+Email notifications are now live in production — `m@businesslinks-pk.com`
+via Bluehost's own mail hosting (SSL, port 465), no separate signup or
+cost since it's included with the hosting plan already in use.
+Verified with a real end-to-end test send (`Mailer::send()` invoked
+directly against the live SMTP config), not just a saved config.
+
 Not yet started: nothing on the current tracked roadmap. Real gaps
 that remain before day-to-day use, not yet scheduled as roadmap items:
 no staff/supplier/customer accounts exist yet beyond the Company
 Owner (account administration now makes this possible, just not yet
-done); `MAIL_HOST` is blank in production, so notifications currently
-log instead of sending; the Google Drive integration for FAT/SAT
-media isn't configured; and `check_ai_digest.php` has only been
-verified against an empty database, not real orders/projects.
+done); the Google Drive integration for FAT/SAT media isn't
+configured; and `check_ai_digest.php` has only been verified against
+an empty database, not real orders/projects.
