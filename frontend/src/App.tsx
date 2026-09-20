@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './lib/auth'
+import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ComingSoonPage } from './pages/ComingSoonPage'
 import { CoordinatorDashboardPage } from './pages/CoordinatorDashboardPage'
 import { CustomerDashboardPage } from './pages/CustomerDashboardPage'
@@ -9,8 +10,10 @@ import { ImportManagerDashboardPage } from './pages/ImportManagerDashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage'
+import { ProjectsPage } from './pages/ProjectsPage'
 import { SalesManagerDashboardPage } from './pages/SalesManagerDashboardPage'
 import { SupplierDashboardPage } from './pages/SupplierDashboardPage'
+import { UserManagementPage } from './pages/UserManagementPage'
 
 function HomePage() {
   const { user } = useAuth()
@@ -48,6 +51,12 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Account administration (§7.1) is Owner-only — matches the backend's own gate. */
+function RequireOwner({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  return user?.role === 'company_owner' ? <>{children}</> : <Navigate to="/" replace />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -65,6 +74,32 @@ export default function App() {
         element={
           <ProtectedRoute>
             <OrderDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects"
+        element={
+          <ProtectedRoute>
+            <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute>
+            <RequireOwner>
+              <UserManagementPage />
+            </RequireOwner>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePasswordPage />
           </ProtectedRoute>
         }
       />

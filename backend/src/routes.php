@@ -6,6 +6,7 @@ declare(strict_types=1);
 
 // Split by domain — see docs/ROADMAP.md Phase 1.
 require __DIR__ . '/routes/health_and_auth.php';
+require __DIR__ . '/routes/users.php';
 require __DIR__ . '/routes/projects.php';
 require __DIR__ . '/routes/orders.php';
 require __DIR__ . '/routes/evidence.php';

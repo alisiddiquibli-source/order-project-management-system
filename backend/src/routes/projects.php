@@ -27,10 +27,9 @@ $router->get('/api/projects/{id}', function (Request $request, array $params): v
 
 $router->post('/api/projects', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
-    // Project Coordinator is the sole point of data entry (§7) — a Sales
-    // Manager or Owner who wants a project created directs the PC to do it,
-    // they don't create it themselves.
-    Authenticator::requireRole($request, ['project_coordinator']);
+    // Data entry — creation is open to whoever originates the deal
+    // (Sales Manager), the PC who'll run it day to day, or the Owner.
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner']);
 
     $body = $request->body;
     $required = ['project_number', 'customer_name', 'title', 'sales_manager_id', 'project_coordinator_id'];
@@ -49,4 +48,24 @@ $router->post('/api/projects', function (Request $request): void {
 
     $project = ProjectRepository::create($body, (int) $claims['sub']);
     Response::json($project, 201);
+});
+
+$router->delete('/api/projects/{id}', function (Request $request, array $params): void {
+    Authenticator::requireAuth($request);
+    // Owner-only, and deliberately not delegated further — deleting a
+    // project (as opposed to marking it 'completed') is rare enough and
+    // consequential enough to keep to one role.
+    Authenticator::requireRole($request, ['company_owner']);
+
+    $id = (int) $params['id'];
+    if (!ProjectRepository::exists($id)) {
+        Response::error('Project not found.', 404);
+    }
+
+    if ($reason = ProjectRepository::blockingDeleteReason($id)) {
+        Response::error($reason, 422);
+    }
+
+    ProjectRepository::delete($id);
+    Response::json(['status' => 'deleted']);
 });

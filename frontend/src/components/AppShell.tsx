@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 const ROLE_LABELS: Record<string, string> = {
@@ -19,16 +20,31 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+            <Link to="/" className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
               BLI
-            </div>
+            </Link>
             <div>
               <p className="text-sm font-semibold leading-tight text-slate-900">{title}</p>
               {user && <p className="text-xs text-slate-500">{ROLE_LABELS[user.role] ?? user.role}</p>}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {user && <span className="hidden text-sm text-slate-600 sm:inline">{user.name}</span>}
+          <div className="flex items-center gap-4">
+            <nav className="hidden items-center gap-4 text-sm font-medium text-slate-600 sm:flex">
+              {user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role) && (
+                <Link to="/projects" className="hover:text-brand-600">
+                  Projects
+                </Link>
+              )}
+              {user?.role === 'company_owner' && (
+                <Link to="/users" className="hover:text-brand-600">
+                  Manage users
+                </Link>
+              )}
+              <Link to="/change-password" className="hover:text-brand-600">
+                Change password
+              </Link>
+            </nav>
+            {user && <span className="hidden text-sm text-slate-600 lg:inline">{user.name}</span>}
             <button
               type="button"
               onClick={logout}
