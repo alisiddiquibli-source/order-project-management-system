@@ -67,6 +67,30 @@ CREATE TABLE projects (
 ALTER TABLE users
     ADD CONSTRAINT fk_users_scope_project FOREIGN KEY (scope_project_id) REFERENCES projects(id);
 
+-- MySQL's CHECK constraints are silently unenforced on server versions
+-- older than 8.0.16 (and on some MariaDB builds) — confirmed in
+-- production, where chk_users_internal_email_domain above parses but
+-- never actually rejects a bad insert. Triggers are enforced on every
+-- version, so they're the real backstop; the CHECK constraint stays too,
+-- both as documentation and in case a server does honor it.
+DELIMITER $$
+CREATE TRIGGER trg_users_email_domain_insert BEFORE INSERT ON users
+FOR EACH ROW
+BEGIN
+    IF NEW.role NOT IN ('supplier', 'customer') AND NEW.email NOT LIKE '%@businesslinks-pk.com' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Internal-role users must have a @businesslinks-pk.com email address.';
+    END IF;
+END$$
+
+CREATE TRIGGER trg_users_email_domain_update BEFORE UPDATE ON users
+FOR EACH ROW
+BEGIN
+    IF NEW.role NOT IN ('supplier', 'customer') AND NEW.email NOT LIKE '%@businesslinks-pk.com' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Internal-role users must have a @businesslinks-pk.com email address.';
+    END IF;
+END$$
+DELIMITER ;
+
 CREATE TABLE orders (
     id                      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     project_id              INT UNSIGNED NOT NULL,

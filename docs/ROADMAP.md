@@ -259,18 +259,28 @@ begins.
   (`check_ai_digest.php` logged one internal failure on an empty
   database with zero orders/projects — not yet root-caused, re-test once
   real data exists).
-  **Known gap, not yet addressed**: `schema.sql`'s `CHECK` constraint
-  requiring internal-role emails to end in `@businesslinks-pk.com`
-  (documented in `CLAUDE.md` as a defense-in-depth backstop, "enforced
-  here... not just in the account-creation API") is not actually being
-  enforced by the live server's MySQL/MariaDB version — a
-  `company_owner` row with a non-`@businesslinks-pk.com` email inserted
-  without error. Likely a MySQL version older than 8.0.16 (or an
-  equivalent MariaDB build) parsing `CHECK` but not enforcing it. The
-  app-layer validation still applies, but this particular backstop is
-  currently a no-op in production — worth confirming the server's exact
-  version and, if it can't enforce `CHECK`, deciding whether to move
-  that validation into a `BEFORE INSERT` trigger instead.
+  **Gap found and fixed**: `schema.sql`'s `CHECK` constraint requiring
+  internal-role emails to end in `@businesslinks-pk.com` (documented in
+  `CLAUDE.md` as a defense-in-depth backstop, "enforced here... not
+  just in the account-creation API") turned out not to be enforced by
+  the live server's MySQL/MariaDB version — a `company_owner` row with
+  a non-`@businesslinks-pk.com` email inserted without error, almost
+  certainly a MySQL version older than 8.0.16 (or an equivalent MariaDB
+  build) parsing `CHECK` but never enforcing it. `CHECK` constraints
+  aren't a reliable backstop across MySQL versions in general, so fixed
+  with `BEFORE INSERT`/`BEFORE UPDATE` triggers on `users`
+  (`trg_users_email_domain_insert`/`_update`) instead — those raise a
+  real error (`SIGNAL SQLSTATE '45000'`) on every MySQL/MariaDB version,
+  regardless of `CHECK` support. The `CHECK` constraint itself stays in
+  the schema too, both as documentation and for any server that does
+  honor it. Verified locally: a bad insert and a bad update are both
+  rejected, valid internal-role and supplier/customer inserts still
+  succeed, and the full e2e suite still passes against the updated
+  schema. **Still needs applying to the live Bluehost database** — the
+  trigger is only in `schema.sql` in the repo so far; re-importing it
+  against the running production database (or running the `CREATE
+  TRIGGER` statements directly) is a live-schema change worth doing
+  deliberately, not something to push unattended.
 - [x] **Committed Playwright e2e suite** (`frontend/e2e/`)
   Every prior verification pass in this project (the 12-stage walk, the
   AMC/shipment/import-tracking round, the AI advisory UI) was a
@@ -382,20 +392,30 @@ described above — the frontend now has a dedicated evidence UI for all
 12 stages plus the order-level AMC module.
 
 Phase 6 (Bluehost deployment) — complete; the system is live at
-`m.businesslinks-pk.com`, see the Phase 6 entry above for the layout,
-what was verified, and the one known gap (the internal-email `CHECK`
-constraint isn't enforced by the live server's MySQL/MariaDB version).
+`m.businesslinks-pk.com`, see the Phase 6 entry above for the layout
+and what was verified.
 
 A committed Playwright e2e suite (`frontend/e2e/`) was added right
 after — see the entry above, including a real login bug it caught and
 fixed on its first run (every failed login attempt was showing
 "Session expired" instead of the actual "Invalid email or password").
-That fix is in the frontend source but has not yet been rebuilt and
-redeployed to the live Bluehost site, which is still running the build
-from before this fix.
+That fix was rebuilt and redeployed to the live site and verified
+live: a deliberately wrong password now shows the correct inline
+error with no page reload.
+
+The `check_ai_digest.php` cold-start failure was root-caused, not just
+an empty-database quirk: Google retired the `gemini-2.0-flash` model
+the adapter defaulted to. Fixed in code (adapter fallback and
+`.env.example` both updated) and on the live server (`GEMINI_MODEL=
+gemini-3.6-flash` added to `.env`) — verified live, the portfolio
+advisory now returns a real result instead of a 404.
+
+The internal-email `CHECK` constraint gap was also root-caused and
+fixed in code — see the Phase 6 entry above for the trigger-based fix
+and its local verification. **Not yet applied to the live database** —
+that's the one remaining deployment step.
 
 Not yet started: nothing on the current roadmap — the tracked backlog
-(Phases 0-6 plus the e2e suite) is now complete. Open follow-ups are
-the two items noted in the Phase 6 entry (the `check_ai_digest.php`
-cold-start failure, and the unenforced `CHECK` constraint) and
-redeploying the frontend with the login-error-handling fix above.
+(Phases 0-6 plus the e2e suite) is complete, code-side. The one open
+item is applying the email-domain trigger fix to the live Bluehost
+database.
