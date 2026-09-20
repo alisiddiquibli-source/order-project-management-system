@@ -6,9 +6,13 @@ import type { DocumentRecord } from '../lib/types'
 /**
  * Document upload + list for one stage (docs/ARCHITECTURE.md §4.3.1).
  * Local files go through the authenticated download endpoint; this form
- * only covers local uploads — a Google Drive file id (FAT/SAT photo/video)
- * is attached the same way `type`/`visibility` are, just not exposed here
- * yet since that path needs a Drive picker, not a plain file input.
+ * only covers local uploads. The architecture doc originally called for
+ * FAT/SAT photos/video to go to Google Drive instead, to avoid filling
+ * Bluehost's disk quota — deliberately not built given actual volume
+ * (~15 files/month), which local storage handles fine. Revisit if volume
+ * grows enough for that to become a real risk; the backend already
+ * accepts `storage_type: 'google_drive'` (a Drive file id as
+ * `file_path`), this form just doesn't have the upload UI for it.
  *
  * @param suggestedType pre-fills the type field for stages with one
  *   canonical document (e.g. 'PO' for stage 2) — still editable, since a
@@ -19,11 +23,15 @@ export function DocumentsSection({
   orderStageId,
   suggestedType,
   title = 'Documents',
+  onUploaded,
 }: {
   orderId: number
   orderStageId: number
   suggestedType: string
   title?: string
+  /** Notifies a sibling that reads the same order's documents (e.g. FatSatSection's
+   *  report-document picker) that a new one exists — they don't share state otherwise. */
+  onUploaded?: () => void
 }) {
   const { user } = useAuth()
   const [documents, setDocuments] = useState<DocumentRecord[] | null>(null)
@@ -57,6 +65,7 @@ export function DocumentsSection({
       await api.post(`/orders/${orderId}/documents`, formData)
       setFile(null)
       await reload()
+      onUploaded?.()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not upload the document.')
     } finally {

@@ -19,11 +19,15 @@ export function FatSatSection({
   orderStageId,
   stageId,
   type,
+  documentsRefreshKey,
 }: {
   orderId: number
   orderStageId: number
   stageId: number
   type: FatSatType
+  /** Bumped by a sibling DocumentsSection when it uploads a new report/photo,
+   *  since this component's own document list isn't otherwise notified. */
+  documentsRefreshKey?: number
 }) {
   const { user } = useAuth()
   const [records, setRecords] = useState<FatSatRecord[] | null>(null)
@@ -44,7 +48,7 @@ export function FatSatSection({
   useEffect(() => {
     reload().catch(() => setError('Could not load FAT/SAT records.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStageId, stageId])
+  }, [orderStageId, stageId, documentsRefreshKey])
 
   const current = records?.find((r) => r.superseded_by === null) ?? null
   const history = records?.filter((r) => r.superseded_by !== null) ?? []
