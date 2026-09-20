@@ -62,8 +62,8 @@ test.describe('project creation and deletion', () => {
     await page.fill('input[placeholder="Project number (e.g. PRJ-0007)"]', 'PRJ-9001')
     await page.fill('input[placeholder="Customer name"]', 'Textile Mills Ltd')
     await page.fill('input[placeholder="Title"]', 'New spinning line')
-    await page.fill('input[placeholder="Sales Manager user ID"]', '2')
-    await page.fill('input[placeholder="Project Coordinator user ID"]', '3')
+    await page.locator('select').nth(0).selectOption({ label: 'Sana Sales (sana@businesslinks-pk.com)' })
+    await page.locator('select').nth(1).selectOption({ label: 'Pia Coordinator (pia@businesslinks-pk.com)' })
     await page.click('button:has-text("Create project")')
 
     await expect(page.locator('text=PRJ-9001')).toBeVisible()
@@ -79,8 +79,8 @@ test.describe('project creation and deletion', () => {
     await page.fill('input[placeholder="Project number (e.g. PRJ-0007)"]', 'PRJ-9002')
     await page.fill('input[placeholder="Customer name"]', 'Textile Mills Ltd')
     await page.fill('input[placeholder="Title"]', 'Owner-created line')
-    await page.fill('input[placeholder="Sales Manager user ID"]', '2')
-    await page.fill('input[placeholder="Project Coordinator user ID"]', '3')
+    await page.locator('select').nth(0).selectOption({ label: 'Sana Sales (sana@businesslinks-pk.com)' })
+    await page.locator('select').nth(1).selectOption({ label: 'Pia Coordinator (pia@businesslinks-pk.com)' })
     await page.click('button:has-text("Create project")')
     await expect(page.locator('text=PRJ-9002')).toBeVisible()
 

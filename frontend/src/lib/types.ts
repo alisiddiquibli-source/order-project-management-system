@@ -62,6 +62,13 @@ export interface Project {
   status: 'active' | 'completed'
 }
 
+export interface Supplier {
+  id: number
+  name: string
+  contact_email: string | null
+  contact_phone: string | null
+}
+
 export type CommentChannel = 'internal' | 'customer' | 'supplier'
 
 export interface Comment {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import type { Project } from '../lib/types'
+import type { Project, User } from '../lib/types'
 
 /**
  * Project creation, open to whoever originates or runs the deal (Sales
@@ -15,6 +15,8 @@ import type { Project } from '../lib/types'
 export function ProjectsPage() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[] | null>(null)
+  const [salesManagers, setSalesManagers] = useState<User[] | null>(null)
+  const [coordinators, setCoordinators] = useState<User[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [projectNumber, setProjectNumber] = useState('')
@@ -28,7 +30,14 @@ export function ProjectsPage() {
   const canDelete = user?.role === 'company_owner'
 
   async function reload() {
-    setProjects(await api.get<Project[]>('/projects'))
+    const requests: Promise<unknown>[] = [api.get<Project[]>('/projects').then(setProjects)]
+    if (canCreate) {
+      requests.push(
+        api.get<User[]>('/users?role=sales_manager').then(setSalesManagers),
+        api.get<User[]>('/users?role=project_coordinator').then(setCoordinators),
+      )
+    }
+    await Promise.all(requests)
   }
 
   useEffect(() => {
@@ -102,20 +111,30 @@ export function ProjectsPage() {
               onChange={(e) => setTitle(e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
-            <input
-              type="number"
-              placeholder="Sales Manager user ID"
+            <select
               value={salesManagerId}
               onChange={(e) => setSalesManagerId(e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="number"
-              placeholder="Project Coordinator user ID"
+            >
+              <option value="">Sales Manager…</option>
+              {salesManagers?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.email})
+                </option>
+              ))}
+            </select>
+            <select
               value={projectCoordinatorId}
               onChange={(e) => setProjectCoordinatorId(e.target.value)}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
+            >
+              <option value="">Project Coordinator…</option>
+              {coordinators?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.email})
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
@@ -125,9 +144,26 @@ export function ProjectsPage() {
           >
             Create project
           </button>
-          {user?.role === 'company_owner' && (
-            <p className="mt-2 text-xs text-slate-400">
-              Look up user IDs on the <Link to="/users" className="underline">Manage users</Link> page.
+          {salesManagers?.length === 0 && (
+            <p className="mt-2 text-xs text-amber-600">
+              No Sales Manager logins exist yet — create one on the{' '}
+              {user?.role === 'company_owner' ? (
+                <Link to="/users" className="underline">Manage users</Link>
+              ) : (
+                'Manage users'
+              )}{' '}
+              page before a project can be created.
+            </p>
+          )}
+          {coordinators?.length === 0 && (
+            <p className="mt-2 text-xs text-amber-600">
+              No Project Coordinator logins exist yet — create one on the{' '}
+              {user?.role === 'company_owner' ? (
+                <Link to="/users" className="underline">Manage users</Link>
+              ) : (
+                'Manage users'
+              )}{' '}
+              page before a project can be created.
             </p>
           )}
         </div>
@@ -137,13 +173,16 @@ export function ProjectsPage() {
         {projects?.map((project) => (
           <div key={project.id} className="flex items-center justify-between gap-4 px-4 py-3">
             <div>
-              <p className="font-medium text-slate-900">
+              <Link to={`/projects/${project.id}`} className="font-medium text-slate-900 hover:underline">
                 {project.project_number} · {project.title}
-              </p>
+              </Link>
               <p className="text-sm text-slate-500">{project.customer_name}</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{project.status}</span>
+              <Link to={`/projects/${project.id}`} className="text-xs font-medium text-brand-600 hover:underline">
+                Orders
+              </Link>
               <Link to={`/projects/${project.id}/media`} className="text-xs font-medium text-brand-600 hover:underline">
                 Media
               </Link>

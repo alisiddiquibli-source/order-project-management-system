@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Bli\Auth\Authenticator;
 use Bli\Http\Request;
 use Bli\Http\Response;
+use Bli\Models\ProjectRepository;
+use Bli\Models\SupplierRepository;
 use Bli\Models\UserRepository;
 
 /** @var \Bli\Http\Router $router */
@@ -16,10 +18,21 @@ use Bli\Models\UserRepository;
 // ---------------------------------------------------------------------
 
 $router->get('/api/users', function (Request $request): void {
-    Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner']);
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
 
-    Response::json(UserRepository::listAll());
+    // Non-owners only get this for populating a role-scoped picker (e.g.
+    // "choose a Sales Manager" when creating a project) — never the full
+    // admin listing across every role/status.
+    $role = $request->query['role'] ?? null;
+    if ($claims['role'] !== 'company_owner' && $role === null) {
+        Response::error('role is required.', 422);
+    }
+    if ($role !== null && !in_array($role, UserRepository::VALID_ROLES, true)) {
+        Response::error('Invalid role.', 422);
+    }
+
+    Response::json(UserRepository::listAll($role));
 });
 
 $router->post('/api/users', function (Request $request): void {
@@ -47,6 +60,22 @@ $router->post('/api/users', function (Request $request): void {
     }
     if (UserRepository::emailExists($email)) {
         Response::error('A user with this email already exists.', 422);
+    }
+
+    // A supplier/customer login is only useful tied to the company/project
+    // it's for — without this a login could be created that can never see
+    // anything, since visibility everywhere keys off these two fields.
+    if ($role === 'supplier') {
+        $supplierId = isset($body['supplier_id']) ? (int) $body['supplier_id'] : null;
+        if ($supplierId === null || !SupplierRepository::exists($supplierId)) {
+            Response::error('supplier_id must reference an existing supplier for a supplier login.', 422);
+        }
+    }
+    if ($role === 'customer') {
+        $projectId = isset($body['scope_project_id']) ? (int) $body['scope_project_id'] : null;
+        if ($projectId === null || !ProjectRepository::exists($projectId)) {
+            Response::error('scope_project_id must reference an existing project for a customer login.', 422);
+        }
     }
 
     $temporaryPassword = UserRepository::generateTemporaryPassword();

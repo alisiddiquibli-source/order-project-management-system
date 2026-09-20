@@ -521,3 +521,56 @@ Bluehost PHP's `upload_max_filesize`/`post_max_size` are large enough
 for real video files — worth checking/raising via cPanel's MultiPHP
 INI Editor (e.g. to ~200M) before relying on this for anything but
 small clips.
+
+**Order creation didn't actually exist anywhere in the UI — the
+Owner's live testing caught this.** Asked to simulate real usage with
+freshly-created accounts (as an actual new deployment would start:
+Owner creates staff, staff create the project and its machines), which
+surfaced that `POST /api/orders` had been fully built on the backend
+since Phase 1 but never had a form calling it: a Project could be
+created, but there was no way, anywhere in the app, to add an Order
+(machine) to it. The same simulation also found that Project
+creation's Sales Manager/PC fields were raw numeric user-ID inputs
+with no lookup — workable only because `GET /api/users` was Owner-only,
+so even the Owner's own hint text ("look up IDs on Manage users") was
+invisible to the Sales Manager/PC roles who can also create projects.
+And there was no way to create a Supplier company at all, which orders
+require a valid `supplier_id` for — so even fixing the ID lookup
+wouldn't have been enough; a brand-new deployment had zero suppliers
+to reference.
+
+Fixed, all verified live end to end:
+- New `SupplierRepository`/`routes/suppliers.php`
+  (`GET`/`POST /api/suppliers`) — suppliers are a simple company
+  directory, visible to any authenticated internal role, created by
+  the same roles allowed to create projects/orders.
+- `GET /api/users` widened from Owner-only to also allow Sales
+  Manager/PC, but only for a role-scoped lookup (`?role=`) — never the
+  full cross-role admin listing those two still can't see. Mutating
+  endpoints (create/patch/reset-password) stay Owner-only, unchanged.
+- `ProjectsPage`'s Sales Manager/PC fields are now dropdowns of actual
+  active users by name/email, not raw IDs — with a plain warning if
+  the needed role has zero accounts yet, instead of a confusing empty
+  picker.
+- `UserManagementPage`'s create-login form now shows a Supplier
+  picker (with inline "add a new supplier") when role=Supplier, and a
+  Project picker when role=Customer — previously neither
+  `supplier_id` nor `scope_project_id` could be set through the UI at
+  all, so a supplier/customer login created there could never see
+  anything (both fields drive all visibility filtering for those
+  roles). Backend now rejects creating either role without the
+  matching reference, rather than silently leaving it NULL.
+- New `ProjectDetailPage` (`/projects/:id`, linked as "Orders" from
+  the Projects list) — the actual missing order-creation form: order
+  number/machine name/spec, Supplier picker with inline add,
+  Installation Engineer picker, dates. PC-only, matching the backend's
+  existing role gate.
+
+Verified with a from-scratch simulation matching how BLI will actually
+onboard: Owner creates a Sales Manager + PC + Engineer login with no
+pre-existing accounts, logs out, the new PC logs in with their
+temporary password, creates a project (Owner does that part), adds a
+brand-new supplier inline, and creates an order — followed all the way
+through to the order's own stage-pipeline page loading correctly.
+Covered by two new regression tests (`e2e/full-simulation.spec.ts`,
+`e2e/user-role-scoping.spec.ts`); full suite now 15/15.
