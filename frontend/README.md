@@ -77,6 +77,12 @@ dispatching a shipment, creating and progressing import tracking through
 stages 7-8, and creating an AMC contract and completing a visit — all
 through the UI.
 
-Pending: a proper Playwright e2e suite (each round's verification has
-been a manually-run script against a live backend, not committed — it
-needs seed-data fixtures to become a real repeatable suite).
+A committed Playwright e2e suite now lives in `e2e/` — run it with
+`npm run test:e2e`. `e2e/global-setup.ts` provisions a throwaway MySQL
+database (schema + `e2e/fixtures/seed.sql`), points a scoped
+`backend/.env` at it (backing up and restoring any real `.env` you
+already have), and boots the PHP + Vite dev servers; `global-teardown.ts`
+tears both down afterward. Override `E2E_DB_HOST`/`E2E_DB_PORT`/
+`E2E_DB_USER`/`E2E_DB_PASS`/`E2E_DB_NAME` if your local MySQL isn't a
+passwordless `root` on `127.0.0.1:3306`. Its first run caught a real
+bug — see `../docs/ROADMAP.md`'s e2e entry.

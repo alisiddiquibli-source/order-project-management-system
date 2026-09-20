@@ -236,10 +236,8 @@ begins.
   and progressed import tracking through stage 7 into stage 8, and
   created an AMC contract, scheduled a visit, and marked it visited — all
   through the real UI, not direct API calls.
-  Pending: a committed Playwright e2e suite with real seed fixtures
-  (every verification pass so far, including this round's, has been a
-  manually-run script, not committed as-is — it needs to become a real
-  repeatable suite).
+  A committed Playwright e2e suite (`frontend/e2e/`) now exists —
+  see the entry below.
 - [x] **Phase 6 — Bluehost deployment**
   Live at `m.businesslinks-pk.com`. Backend code lives outside the public
   document root (`~/bli-app/backend`, cloned from this repo), with a thin
@@ -273,6 +271,34 @@ begins.
   currently a no-op in production — worth confirming the server's exact
   version and, if it can't enforce `CHECK`, deciding whether to move
   that validation into a `BEFORE INSERT` trigger instead.
+- [x] **Committed Playwright e2e suite** (`frontend/e2e/`)
+  Every prior verification pass in this project (the 12-stage walk, the
+  AMC/shipment/import-tracking round, the AI advisory UI) was a
+  one-off, manually-run script — this is the first one that's actually
+  checked in and repeatable via `npm run test:e2e` from a clean
+  checkout. `global-setup.ts` provisions a throwaway MySQL database from
+  `backend/database/schema.sql` plus a deterministic fixture
+  (`e2e/fixtures/seed.sql` — one user per internal role, one order with
+  stages 6-8 `in_progress`), writes a scoped `backend/.env` (backing up
+  and restoring whatever real `.env` was already there, so the suite
+  never clobbers a developer's local config), and boots the PHP + Vite
+  dev servers; `global-teardown.ts` tears both down. Three spec files:
+  `auth.spec.ts`, `stage-evidence.spec.ts` (stage 6 shipment booking +
+  dispatch, stages 7-8 import tracking through `cleared` into
+  `delivered`), and `amc.spec.ts` (contract creation, visit
+  scheduling/completion) — covering exactly the frontend work from the
+  two rounds above that had zero regression coverage before this.
+  **Real bug caught immediately**: `api.ts`'s fetch wrapper treated
+  *any* 401 — including one from the login request itself — as "your
+  session expired," triggering a doomed silent-refresh attempt, a hard
+  redirect to `/login`, and a misleading "Session expired" message
+  instead of the backend's actual "Invalid email or password." Every
+  real user who ever mistyped a password would have hit this. Fixed by
+  only taking that path when a token was actually attached to the
+  request (an unauthenticated request, like login, can't have a session
+  to expire) — verified both by the now-passing test and by re-reading
+  the fix against the refresh-token flow for an already-logged-in user,
+  which is unaffected.
 
 ## Explicitly out of scope for now
 
@@ -360,4 +386,16 @@ Phase 6 (Bluehost deployment) — complete; the system is live at
 what was verified, and the one known gap (the internal-email `CHECK`
 constraint isn't enforced by the live server's MySQL/MariaDB version).
 
-Not yet started: a committed Playwright e2e suite.
+A committed Playwright e2e suite (`frontend/e2e/`) was added right
+after — see the entry above, including a real login bug it caught and
+fixed on its first run (every failed login attempt was showing
+"Session expired" instead of the actual "Invalid email or password").
+That fix is in the frontend source but has not yet been rebuilt and
+redeployed to the live Bluehost site, which is still running the build
+from before this fix.
+
+Not yet started: nothing on the current roadmap — the tracked backlog
+(Phases 0-6 plus the e2e suite) is now complete. Open follow-ups are
+the two items noted in the Phase 6 entry (the `check_ai_digest.php`
+cold-start failure, and the unenforced `CHECK` constraint) and
+redeploying the frontend with the login-error-handling fix above.
