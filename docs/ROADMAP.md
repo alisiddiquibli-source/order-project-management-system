@@ -240,9 +240,39 @@ begins.
   (every verification pass so far, including this round's, has been a
   manually-run script, not committed as-is — it needs to become a real
   repeatable suite).
-- [ ] **Phase 6 — Bluehost deployment**
-  cPanel MySQL DB, PHP deployment, static frontend build, SSL, both cron
-  jobs (daily + hourly), go-live.
+- [x] **Phase 6 — Bluehost deployment**
+  Live at `m.businesslinks-pk.com`. Backend code lives outside the public
+  document root (`~/bli-app/backend`, cloned from this repo), with a thin
+  front controller at `m.businesslinks-pk.com/api/index.php` pointing at
+  it by absolute path — the same layout `public/index.php` uses locally,
+  just with `dirname(__DIR__)` replaced by a hardcoded path since the
+  file no longer lives next to `vendor/`. Frontend is a static build
+  (`frontend/dist`) served directly from the document root, with an
+  `.htaccess` SPA fallback so client-side routes survive a refresh.
+  MySQL database + schema imported via phpMyAdmin. AutoSSL issued for the
+  subdomain. All three cron jobs (`check_ticket_sla.php` hourly,
+  `check_stage_deadlines.php` and `check_ai_digest.php` daily) are live
+  in cPanel's Cron Jobs. `AI_DEFAULT_PROVIDER=gemini` with a Google AI
+  Studio free-tier key, since Claude/ChatGPT's APIs don't have a
+  no-cost tier for this kind of light, infrequent use.
+  Verified live: `GET /api/health` returns `200
+  {"status":"ok","db":"connected"}` over HTTPS; the site loads and a
+  Company Owner can log in; all three cron scripts run cleanly by hand
+  (`check_ai_digest.php` logged one internal failure on an empty
+  database with zero orders/projects — not yet root-caused, re-test once
+  real data exists).
+  **Known gap, not yet addressed**: `schema.sql`'s `CHECK` constraint
+  requiring internal-role emails to end in `@businesslinks-pk.com`
+  (documented in `CLAUDE.md` as a defense-in-depth backstop, "enforced
+  here... not just in the account-creation API") is not actually being
+  enforced by the live server's MySQL/MariaDB version — a
+  `company_owner` row with a non-`@businesslinks-pk.com` email inserted
+  without error. Likely a MySQL version older than 8.0.16 (or an
+  equivalent MariaDB build) parsing `CHECK` but not enforcing it. The
+  app-layer validation still applies, but this particular backstop is
+  currently a no-op in production — worth confirming the server's exact
+  version and, if it can't enforce `CHECK`, deciding whether to move
+  that validation into a `BEFORE INSERT` trigger instead.
 
 ## Explicitly out of scope for now
 
@@ -325,5 +355,9 @@ for stages 6-8 were added right after (`AmcSection`, `ShipmentSection`,
 described above — the frontend now has a dedicated evidence UI for all
 12 stages plus the order-level AMC module.
 
-Not yet started: Phase 6 (Bluehost deployment), and a committed
-Playwright e2e suite.
+Phase 6 (Bluehost deployment) — complete; the system is live at
+`m.businesslinks-pk.com`, see the Phase 6 entry above for the layout,
+what was verified, and the one known gap (the internal-email `CHECK`
+constraint isn't enforced by the live server's MySQL/MariaDB version).
+
+Not yet started: a committed Playwright e2e suite.
