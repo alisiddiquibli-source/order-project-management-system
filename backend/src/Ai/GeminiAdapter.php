@@ -15,7 +15,7 @@ final class GeminiAdapter implements ProviderAdapter
         }
 
         $baseUrl = rtrim($_ENV['GEMINI_API_BASE_URL'] ?? 'https://generativelanguage.googleapis.com', '/');
-        $model = $_ENV['GEMINI_MODEL'] ?? 'gemini-2.0-flash';
+        $model = $_ENV['GEMINI_MODEL'] ?? 'gemini-3.6-flash';
 
         $response = HttpJsonClient::postJson(
             "{$baseUrl}/v1beta/models/{$model}:generateContent?key=" . urlencode($apiKey),
