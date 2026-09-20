@@ -12,6 +12,7 @@ use Bli\Models\DocumentRepository;
 use Bli\Models\EngineerReportRepository;
 use Bli\Models\FatSatRepository;
 use Bli\Models\ManufacturingMilestoneRepository;
+use Bli\Models\ProjectRepository;
 use Bli\Models\RequirementRepository;
 use Bli\Models\TrainingRecordRepository;
 
@@ -90,7 +91,11 @@ $router->post('/api/orders/{id}/documents', function (Request $request, array $p
             Response::error('file_path (the Google Drive file ID) is required for storage_type=google_drive.', 422);
         }
     } else {
-        if (!isset($request->files['file']) || $request->files['file']['error'] !== UPLOAD_ERR_OK) {
+        $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+        if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+            Response::error('The file is too large for this server to accept.', 422);
+        }
+        if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
             Response::error('A file upload is required for storage_type=local.', 422);
         }
         try {
@@ -118,6 +123,62 @@ $router->post('/api/orders/{id}/documents', function (Request $request, array $p
     Response::json($document, 201);
 });
 
+// Project-level media (docs/ARCHITECTURE.md §4.3.1 extension): video and
+// other files attached to a project as a whole rather than to one
+// order/stage — e.g. a walkthrough video, site-survey photos. Same local
+// storage + authenticated-download model as order documents.
+$router->get('/api/projects/{id}/documents', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $projectId = (int) $params['id'];
+    if (ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+        Response::error('Project not found.', 404);
+    }
+
+    Response::json(DocumentRepository::findForProject($projectId, $claims));
+});
+
+$router->post('/api/projects/{id}/documents', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['project_coordinator', 'installation_engineer', 'sales_manager', 'company_owner']);
+
+    $projectId = (int) $params['id'];
+    if (ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+        Response::error('Project not found.', 404);
+    }
+
+    $type = (string) ($request->body['type'] ?? '');
+    if ($type === '') {
+        Response::error('type is required.', 422);
+    }
+
+    $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+        Response::error('The file is too large for this server to accept.', 422);
+    }
+    if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
+        Response::error('A file upload is required.', 422);
+    }
+
+    try {
+        $filePath = DocumentRepository::storeUploadedFile(
+            $request->files['file']['tmp_name'],
+            $request->files['file']['name'],
+        );
+    } catch (\InvalidArgumentException $e) {
+        Response::error($e->getMessage(), 422);
+    }
+
+    $document = DocumentRepository::create([
+        'project_id' => $projectId,
+        'type' => $type,
+        'storage_type' => 'local',
+        'file_path' => $filePath,
+        'visibility' => $request->body['visibility'] ?? 'internal',
+    ], (int) $claims['sub']);
+
+    Response::json($document, 201);
+});
+
 $router->get('/api/documents/{id}/file', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
 
@@ -125,9 +186,13 @@ $router->get('/api/documents/{id}/file', function (Request $request, array $para
     if ($document === null) {
         Response::error('Document not found.', 404);
     }
-    // Belt and braces: visibility already filtered the lookup, but the
-    // order itself must also be one this user can see.
-    OrderAccess::requireVisibleOrder((int) $document['order_id'], $claims);
+    // A project-level document has no order_id to check; an order-scoped
+    // one is re-checked here too, belt and braces — visibility already
+    // filtered the lookup, but the order itself must also be one this
+    // user can see.
+    if ($document['order_id'] !== null) {
+        OrderAccess::requireVisibleOrder((int) $document['order_id'], $claims);
+    }
 
     if ($document['storage_type'] === 'google_drive') {
         // The link is only ever handed to a requester who already passed
@@ -140,8 +205,9 @@ $router->get('/api/documents/{id}/file', function (Request $request, array $para
         Response::error('File missing from storage.', 404);
     }
 
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="' . basename($document['file_path']) . '"');
+    $disposition = DocumentRepository::isInlineViewable($document['file_path']) ? 'inline' : 'attachment';
+    header('Content-Type: ' . DocumentRepository::mimeType($document['file_path']));
+    header('Content-Disposition: ' . $disposition . '; filename="' . basename($document['file_path']) . '"');
     readfile($absolutePath);
     exit;
 });

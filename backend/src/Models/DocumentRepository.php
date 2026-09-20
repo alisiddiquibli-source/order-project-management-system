@@ -142,8 +142,7 @@ final class DocumentRepository
     public static function storeUploadedFile(string $tmpPath, string $originalName): string
     {
         $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-        $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'xls', 'xlsx'];
-        if (!in_array($extension, $allowed, true)) {
+        if (!array_key_exists($extension, self::MIME_TYPES)) {
             throw new \InvalidArgumentException('Unsupported file type.');
         }
 
@@ -155,5 +154,63 @@ final class DocumentRepository
         }
 
         return $filename;
+    }
+
+    /**
+     * Whitelisted extension -> MIME type, doubling as the set of accepted
+     * upload types (docs/ARCHITECTURE.md §4.3.1 — extended to cover project
+     * media/video alongside the original document types). Used both to
+     * validate uploads and to serve the right Content-Type back.
+     */
+    private const MIME_TYPES = [
+        'pdf' => 'application/pdf',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'doc' => 'application/msword',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls' => 'application/vnd.ms-excel',
+        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'mp4' => 'video/mp4',
+        'mov' => 'video/quicktime',
+        'webm' => 'video/webm',
+        'm4v' => 'video/mp4',
+    ];
+
+    public static function mimeType(string $filePath): string
+    {
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        return self::MIME_TYPES[$extension] ?? 'application/octet-stream';
+    }
+
+    public static function isInlineViewable(string $filePath): bool
+    {
+        return str_starts_with(self::mimeType($filePath), 'image/') || str_starts_with(self::mimeType($filePath), 'video/');
+    }
+
+    /**
+     * Documents attached directly to a project (general project media not
+     * tied to a specific order/stage) plus every document belonging to one
+     * of the project's orders — same visibility rule as findForOrder().
+     *
+     * @param array<string, mixed> $claims
+     * @return array<int, array<string, mixed>>
+     */
+    public static function findForProject(int $projectId, array $claims): array
+    {
+        [$sql, $params] = self::visibilityFilter($claims);
+        $params['project_id_direct'] = $projectId;
+        $params['project_id_via_order'] = $projectId;
+
+        $stmt = Database::connection()->prepare(
+            "SELECT d.* FROM documents d
+             LEFT JOIN orders o ON o.id = d.order_id
+             WHERE (d.project_id = :project_id_direct OR o.project_id = :project_id_via_order) AND ({$sql})
+             ORDER BY d.created_at DESC"
+        );
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
     }
 }

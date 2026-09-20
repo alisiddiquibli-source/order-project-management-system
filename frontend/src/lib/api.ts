@@ -123,3 +123,23 @@ export async function downloadDocument(id: number, suggestedName: string): Promi
   link.click()
   URL.revokeObjectURL(url)
 }
+
+/**
+ * Like downloadDocument, but for rendering inline (an <img>/<video> src)
+ * instead of triggering a save-as — the object URL is the caller's to
+ * revoke (URL.revokeObjectURL) once no longer displayed, since it isn't
+ * released here. A plain <img src="/api/..."> can't attach the bearer
+ * token, which is why this goes through fetch + blob like the download.
+ */
+export async function fetchDocumentPreviewUrl(id: number): Promise<string> {
+  const token = getAccessToken()
+  const response = await fetch(`/api/documents/${id}/file`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    throw new ApiError(response.status, 'Could not load the file.')
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}

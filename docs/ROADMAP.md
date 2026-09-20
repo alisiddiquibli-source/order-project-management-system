@@ -480,3 +480,44 @@ no staff/supplier/customer accounts exist yet beyond the Company
 Owner (account administration now makes this possible, just not yet
 done); and `check_ai_digest.php` has only been verified against an
 empty database, not real orders/projects.
+
+**Project media (photo/video) — extended the existing document system
+rather than a separate blog/CMS.** The Owner asked for a way to host
+video and other documents for a project that integrates with the
+existing system. Recommended against a second, separate CMS
+(e.g. a private WordPress blog) on the same Bluehost account: that
+account's `public_html` had a confirmed, unremediated web-shell
+compromise (see the housekeeping-system deployment notes) — standing
+up a new CMS there before that's cleaned up would be a real risk, and
+a second system is a second thing to secure/patch/bridge auth to for
+no real benefit at this scale.
+
+Instead: `DocumentRepository`'s upload allowlist now accepts video
+(`mp4`, `mov`, `webm`, `m4v`) alongside the existing document types,
+keyed to a proper MIME-type map used both for validating uploads and
+for serving the right `Content-Type`/disposition back (previously
+every file was served as `application/octet-stream` with a forced
+download — now images/video serve `inline` with their real type, and
+non-media files still download as before). A new `DocumentPreview`
+component renders an inline `<img>`/`<video>` for local image/video
+documents (fetched through the existing authenticated-blob pattern,
+same as downloads always have — no query-string tokens, no public
+URLs) and is now used both in `DocumentsSection` (per-stage documents)
+and a new project-wide view.
+
+New: `GET/POST /api/projects/{id}/documents` — a project-level media
+feed aggregating every document across all of a project's orders plus
+general project uploads not tied to any one order/stage (e.g. a
+walkthrough video, site-survey photos), same visibility rules as the
+order-scoped endpoint. New `ProjectMediaPage` (`/projects/:id/media`,
+linked from the Projects list) shows this as a grid with inline
+previews. Verified live: uploading a photo and a video both preview
+inline, download still works, and the feed correctly includes a
+document uploaded through the order-level FAT flow — covered by a new
+regression test (`e2e/project-media.spec.ts`, suite now 12/12).
+
+Operational note, not yet acted on: this only helps once the live
+Bluehost PHP's `upload_max_filesize`/`post_max_size` are large enough
+for real video files — worth checking/raising via cPanel's MultiPHP
+INI Editor (e.g. to ~200M) before relying on this for anything but
+small clips.

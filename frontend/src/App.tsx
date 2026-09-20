@@ -10,6 +10,7 @@ import { ImportManagerDashboardPage } from './pages/ImportManagerDashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage'
+import { ProjectMediaPage } from './pages/ProjectMediaPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { SalesManagerDashboardPage } from './pages/SalesManagerDashboardPage'
 import { SupplierDashboardPage } from './pages/SupplierDashboardPage'
@@ -82,6 +83,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects/:id/media"
+        element={
+          <ProtectedRoute>
+            <ProjectMediaPage />
           </ProtectedRoute>
         }
       />

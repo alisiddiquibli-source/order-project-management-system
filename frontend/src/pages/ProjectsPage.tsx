@@ -144,6 +144,9 @@ export function ProjectsPage() {
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{project.status}</span>
+              <Link to={`/projects/${project.id}/media`} className="text-xs font-medium text-brand-600 hover:underline">
+                Media
+              </Link>
               {canDelete && (
                 <button type="button" onClick={() => handleDelete(project)} className="text-xs font-medium text-red-600 hover:underline">
                   Delete

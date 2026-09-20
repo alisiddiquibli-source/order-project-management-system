@@ -89,8 +89,15 @@ plan to "prettify later."
 - Two crons, not one: `check_stage_deadlines.php` (daily) and
   `check_ticket_sla.php` (**hourly** — an hour-level SLA can't be caught
   by a once-a-day scan)
-- FAT/SAT photos and video: Google Drive (service account, not a personal
-  OAuth token) — see the media rule below. PDFs stay on local storage.
+- Documents and media (PDFs, photos, FAT/SAT video, project media):
+  local storage on Bluehost, served only through the authenticated
+  `/api/documents/{id}/file` endpoint — never a public path. The
+  original design (§11) called for Google Drive for FAT/SAT
+  photo/video specifically, to avoid filling Bluehost's disk quota;
+  deliberately not built given actual volume (~15 files/month, see
+  `docs/ROADMAP.md`). The backend still accepts `storage_type:
+  'google_drive'` as an escape hatch if volume ever makes that a real
+  risk — see the media rule below and `DocumentsSection`'s own comment.
 
 ## Non-negotiable rules
 

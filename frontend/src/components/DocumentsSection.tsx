@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
+import { DocumentPreview } from './DocumentPreview'
 import { ApiError, api, downloadDocument } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { DocumentRecord } from '../lib/types'
 
 /**
  * Document upload + list for one stage (docs/ARCHITECTURE.md §4.3.1).
- * Local files go through the authenticated download endpoint; this form
- * only covers local uploads. The architecture doc originally called for
- * FAT/SAT photos/video to go to Google Drive instead, to avoid filling
- * Bluehost's disk quota — deliberately not built given actual volume
- * (~15 files/month), which local storage handles fine. Revisit if volume
- * grows enough for that to become a real risk; the backend already
- * accepts `storage_type: 'google_drive'` (a Drive file id as
- * `file_path`), this form just doesn't have the upload UI for it.
+ * Local files (including FAT/SAT photos/video) go through the
+ * authenticated download endpoint and get an inline preview via
+ * DocumentPreview; this form only covers local uploads. The architecture
+ * doc originally called for photo/video to go to Google Drive instead, to
+ * avoid filling Bluehost's disk quota — deliberately not built given
+ * actual volume (~15 files/month), which local storage handles fine.
+ * Revisit if volume grows enough for that to become a real risk; the
+ * backend already accepts `storage_type: 'google_drive'` (a Drive file id
+ * as `file_path`), this form just doesn't have the upload UI for it.
  *
  * @param suggestedType pre-fills the type field for stages with one
  *   canonical document (e.g. 'PO' for stage 2) — still editable, since a
@@ -89,22 +91,25 @@ export function DocumentsSection({
 
       <div className="mb-3 space-y-1.5">
         {documents?.map((doc) => (
-          <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-1.5 text-sm">
-            <span className="text-slate-700">{doc.type}</span>
-            {doc.storage_type === 'google_drive' ? (
-              <a
-                href={`https://drive.google.com/file/d/${doc.file_path}/view`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand-600 hover:underline"
-              >
-                View in Drive
-              </a>
-            ) : (
-              <button type="button" onClick={() => handleDownload(doc)} className="text-brand-600 hover:underline">
-                Download
-              </button>
-            )}
+          <div key={doc.id} className="rounded-md bg-slate-50 px-3 py-1.5 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-slate-700">{doc.type}</span>
+              {doc.storage_type === 'google_drive' ? (
+                <a
+                  href={`https://drive.google.com/file/d/${doc.file_path}/view`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-600 hover:underline"
+                >
+                  View in Drive
+                </a>
+              ) : (
+                <button type="button" onClick={() => handleDownload(doc)} className="text-brand-600 hover:underline">
+                  Download
+                </button>
+              )}
+            </div>
+            <DocumentPreview document={doc} className="mt-1.5 max-h-40 rounded-md border border-slate-200 object-cover" />
           </div>
         ))}
         {documents?.length === 0 && <p className="text-sm text-slate-400">No documents yet.</p>}
