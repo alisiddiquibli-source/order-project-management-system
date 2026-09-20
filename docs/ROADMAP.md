@@ -459,10 +459,24 @@ cost since it's included with the hosting plan already in use.
 Verified with a real end-to-end test send (`Mailer::send()` invoked
 directly against the live SMTP config), not just a saved config.
 
+**Google Drive for FAT/SAT media — deliberately not built.** Real
+upload volume is ~15 files/month, well within what local storage
+already handles; the disk-quota risk that motivated the original
+Drive design (docs/ARCHITECTURE.md §11) isn't a real concern at this
+volume. `DocumentsSection` still only covers local uploads — see its
+own doc comment for what to revisit if volume grows.
+Scoping this surfaced a real, unrelated bug: stages 5 (FAT) and 10
+(SAT) never rendered a `DocumentsSection` at all, so there was no way
+to attach a FAT/SAT report or photo through the UI, not even locally.
+Fixed, along with a second bug it exposed — `FatSatSection`'s report-
+document picker is a sibling component with its own independent
+fetch, so a freshly-uploaded report didn't show up in the dropdown
+without a page reload. Both verified live and covered by a new
+regression test (`e2e/fatsat-documents.spec.ts`, suite now 11/11).
+
 Not yet started: nothing on the current tracked roadmap. Real gaps
 that remain before day-to-day use, not yet scheduled as roadmap items:
 no staff/supplier/customer accounts exist yet beyond the Company
 Owner (account administration now makes this possible, just not yet
-done); the Google Drive integration for FAT/SAT media isn't
-configured; and `check_ai_digest.php` has only been verified against
-an empty database, not real orders/projects.
+done); and `check_ai_digest.php` has only been verified against an
+empty database, not real orders/projects.
