@@ -309,6 +309,36 @@ begins.
   to expire) — verified both by the now-passing test and by re-reading
   the fix against the refresh-token flow for an already-logged-in user,
   which is unaffected.
+- [x] **Account administration** (docs/ARCHITECTURE.md §7.1)
+  Specified from Phase 0 but never built in any of Phases 1-6 — the
+  only way to add a real user was a hand-written SQL insert, and there
+  was no password-reset path at all. Adds `src/routes/users.php`
+  (`GET`/`POST /api/users`, `PATCH /api/users/{id}`,
+  `POST /api/users/{id}/reset-password` — Company Owner only) and
+  `PATCH /api/me/password` (any authenticated user, to set their own
+  password after a temporary one). A created account's or a reset's
+  password is generated randomly and returned exactly once in that
+  response — never stored in plaintext, never logged, never
+  retrievable again — so the Owner has to actually hand it to the
+  person before navigating away. Validates the same
+  `@businesslinks-pk.com` domain rule the database triggers enforce, so
+  a bad request gets a clean 422 rather than relying solely on the
+  trigger; an Owner cannot deactivate their own account. Frontend:
+  `UserManagementPage` (`/users`, Owner-only) and `ChangePasswordPage`
+  (`/change-password`, every role).
+  **While in the area**, also widened project creation from
+  Project-Coordinator-only to Sales Manager/PC/Owner, and added project
+  deletion (`DELETE /api/projects/{id}`, Owner-only) — `ProjectsPage`
+  is the new frontend surface for both. Deletion is blocked, not
+  cascaded, if the project has any order, document, comment, or scoped
+  customer login attached, consistent with how this system treats that
+  data as an audit trail rather than something to silently discard.
+  Verified end-to-end against a live server for every scenario (create/
+  reset/deactivate/reactivate a login, domain validation, the
+  self-lockout guard, self password change with a real re-login,
+  project creation by each allowed role, deletion blocked for
+  non-owners and blocked when an order exists) before adding the same
+  coverage to the committed e2e suite (`admin.spec.ts`).
 
 ## Explicitly out of scope for now
 
@@ -411,11 +441,23 @@ gemini-3.6-flash` added to `.env`) — verified live, the portfolio
 advisory now returns a real result instead of a 404.
 
 The internal-email `CHECK` constraint gap was also root-caused and
-fixed in code — see the Phase 6 entry above for the trigger-based fix
-and its local verification. **Not yet applied to the live database** —
-that's the one remaining deployment step.
+fixed in code (see the Phase 6 entry above for the trigger-based fix
+and its local verification) and applied to the live database —
+verified there too: a deliberately bad insert is rejected, and the
+existing Company Owner login was updated to a real
+`@businesslinks-pk.com` address to match.
 
-Not yet started: nothing on the current roadmap — the tracked backlog
-(Phases 0-6 plus the e2e suite) is complete, code-side. The one open
-item is applying the email-domain trigger fix to the live Bluehost
-database.
+Account administration (create/deactivate logins, reset passwords,
+role assignment) and project creation/deletion were added right after
+— see the entry above. Both were designed from Phase 0
+(docs/ARCHITECTURE.md §7.1) but had never actually been built; this
+closes that gap.
+
+Not yet started: nothing on the current tracked roadmap. Real gaps
+that remain before day-to-day use, not yet scheduled as roadmap items:
+no staff/supplier/customer accounts exist yet beyond the Company
+Owner (account administration now makes this possible, just not yet
+done); `MAIL_HOST` is blank in production, so notifications currently
+log instead of sending; the Google Drive integration for FAT/SAT
+media isn't configured; and `check_ai_digest.php` has only been
+verified against an empty database, not real orders/projects.

@@ -241,11 +241,24 @@ plan to "prettify later."
   `requireVisibleStageByPk()` for flat evidence routes like
   `/api/fat-sat/{id}/result` that aren't nested under `/orders/{id}/...`).
 - `src/routes/*.php` — route registration, split by domain
-  (`health_and_auth.php`, `projects.php`, `orders.php`, `evidence.php`,
-  `comments.php`, `logistics.php`, `service.php` — AMC + service tickets,
-  `ai.php`), required from `src/routes.php`. Keep splitting further
-  before any one file gets unwieldy — that's already why this isn't one
-  big `routes.php`.
+  (`health_and_auth.php`, `users.php` — account administration,
+  `projects.php`, `orders.php`, `evidence.php`, `comments.php`,
+  `logistics.php`, `service.php` — AMC + service tickets, `ai.php`),
+  required from `src/routes.php`. Keep splitting further before any one
+  file gets unwieldy — that's already why this isn't one big
+  `routes.php`.
+- `src/routes/users.php` — account administration (docs/ARCHITECTURE.md
+  §7.1), Company Owner only except `PATCH /api/me/password` (any
+  authenticated user, to set their own password after receiving a
+  temporary one). Creating a user or resetting a password generates a
+  random plaintext password, returned exactly once in that response —
+  never stored, never logged, never retrievable again. Validates the
+  same `@businesslinks-pk.com` domain rule the `users` table triggers
+  enforce (`UserRepository::validateEmailDomain()`), so a bad request
+  from this API gets a clean 422 instead of relying solely on the
+  trigger. An Owner cannot deactivate their own account
+  (`PATCH /api/users/{id}` with `status: inactive` on your own id is
+  rejected) — the one self-lockout guard this route needs.
 - `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
   logic lives in `src/Domain/DeadlineScanner.php` so it's testable
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
@@ -355,6 +368,13 @@ separation of concerns:
   `App.tsx`'s `HomePage`. A role with no dedicated view yet gets
   `ComingSoonPage`, not a broken screen — add its real dashboard as its
   own file when built, don't retrofit `ComingSoonPage` into one.
+  `UserManagementPage` (`/users`, Owner-only — gated in `App.tsx` via
+  `RequireOwner`, matching the backend's own gate, not just a hidden
+  nav link) and `ChangePasswordPage` (`/change-password`, every role)
+  are the account-administration UI (§7.1). `ProjectsPage` (`/projects`)
+  is project creation (Sales Manager/PC/Owner) and deletion
+  (Owner-only, hidden entirely for other roles rather than shown
+  disabled) — nothing else renders a project list on its own.
 - Business-rule rejections from the API (422s) are shown to the user
   verbatim (see `StageUpdateForm` in `OrderDetailPage.tsx`) — that's
   deliberate, not a placeholder: the whole point of this system is that
