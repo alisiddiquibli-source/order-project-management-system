@@ -39,6 +39,11 @@ export function OrderDetailPage() {
 
   const canEditStages = user?.role === 'project_coordinator'
   const canGenerateRiskAdvisory = user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role)
+  // Internal staffing info (who's assigned) — not shown to Customer/Supplier
+  // logins. Nothing asked for this to be external-facing, and it's BLI's
+  // own staff directory, not operational data those roles need here; they
+  // already reach their BLI contact via Comments.
+  const isInternal = user && !['customer', 'supplier'].includes(user.role)
 
   return (
     <AppShell title={order ? `${order.order_number} · ${order.machine_name}` : 'Order'}>
@@ -53,7 +58,7 @@ export function OrderDetailPage() {
         </div>
       )}
 
-      {order && (
+      {order && isInternal && (
         <div className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
           <Field label="Sales Manager" value={order.sales_manager_name ?? '—'} />
           <Field label="Project Coordinator" value={order.project_coordinator_name ?? '—'} />

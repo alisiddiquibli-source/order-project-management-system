@@ -706,3 +706,32 @@ ALTER TABLE documents MODIFY storage_type ENUM('local','google_drive','link') NO
 Verified live: PC adds a link to a stage document, Sales Manager adds
 a link as general project media, both show "Open link" pointing at the
 real URL. Two new regression tests; full suite now 21/21.
+
+**Confirmed the order page's per-role authority model already works —
+and found/fixed a real leak while checking.** The Owner asked that this
+screen (read/modify/comment/structure, by role) be available to every
+internal party, Owner through Engineer. Verified this was already true
+by logging in as each of the 5 internal roles and screenshotting the
+same order: Owner/PC edit everything; Sales Manager edits PC/Engineer/
+dates only; Import Manager and Installation Engineer get full read
+access (including expanding a stage to see its evidence — documents,
+FAT/SAT, etc. — with upload/edit controls correctly hidden) plus
+comments; Engineer additionally gets tickets/AMC. No code needed for
+internal roles — already correct.
+
+Checking Customer and Supplier the same way surfaced a real bug: the
+new Sales Manager/PC/Engineer/Supplier staffing row (added surfacing
+assignments, above) rendered unconditionally, leaking BLI's internal
+staff names to external logins — never vetted against them when it was
+built. Fixed both client-side (`OrderDetailPage` hides the row for
+customer/supplier) and server-side (`OrderRepository::redactForRole`
+strips those fields from the API response for those roles too — same
+discipline already applied to `contract_value`/`currency`, not just a
+frontend hide). New regression test
+(`e2e/external-role-redaction.spec.ts`) covers both the redaction and
+that internal roles are unaffected; full suite now 22/22.
+
+Customer/Supplier dashboards were also spot-checked directly (not just
+inferred from code) — both render correctly once given a moment to
+load; an initial blank-looking screenshot was a premature capture in
+the verification script, not a real bug.

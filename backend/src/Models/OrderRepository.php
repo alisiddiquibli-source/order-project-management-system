@@ -87,8 +87,25 @@ final class OrderRepository
      */
     private static function redactForRole(array $order, array $claims): array
     {
-        if (($claims['role'] ?? null) === 'supplier') {
+        $role = $claims['role'] ?? null;
+
+        if ($role === 'supplier') {
             unset($order['contract_value'], $order['currency']);
+        }
+
+        // BLI's internal staffing (who's assigned) is redacted server-side
+        // for external logins, not just hidden in the UI — same discipline
+        // as the redactions above. Customer/Supplier reach their BLI
+        // contact via Comments, not by name here.
+        if (in_array($role, ['customer', 'supplier'], true)) {
+            unset(
+                $order['sales_manager_id'],
+                $order['sales_manager_name'],
+                $order['effective_project_coordinator_id'],
+                $order['project_coordinator_name'],
+                $order['installation_engineer_name'],
+                $order['supplier_name'],
+            );
         }
 
         return $order;
