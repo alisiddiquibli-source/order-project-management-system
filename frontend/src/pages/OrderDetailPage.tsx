@@ -4,6 +4,7 @@ import { AiReportsPanel } from '../components/AiReportsPanel'
 import { AmcSection } from '../components/AmcSection'
 import { AppShell } from '../components/AppShell'
 import { CommentsPanel } from '../components/CommentsPanel'
+import { OrderEditForm } from '../components/OrderEditForm'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
 import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
@@ -49,6 +50,12 @@ export function OrderDetailPage() {
           <Field label="Start date" value={order.start_date} />
           <Field label="Target handover" value={order.target_handover_date} />
           <Field label="Machine spec" value={order.machine_spec ?? '—'} />
+        </div>
+      )}
+
+      {order && (
+        <div className="mb-6">
+          <OrderEditForm order={order} onUpdated={reload} />
         </div>
       )}
 

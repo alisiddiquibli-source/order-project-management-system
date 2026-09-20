@@ -574,3 +574,38 @@ brand-new supplier inline, and creates an order — followed all the way
 through to the order's own stage-pipeline page loading correctly.
 Covered by two new regression tests (`e2e/full-simulation.spec.ts`,
 `e2e/user-role-scoping.spec.ts`); full suite now 15/15.
+
+**Owner couldn't create or fix an order at all — flagged live, asked
+rather than silently decided.** `ProjectDetailPage`'s "Add a machine"
+form is PC-only, matching `POST /api/orders`'s original role gate —
+by design (§2: Owner has "full visibility... no project data entry").
+Live testing showed this is a real gap in practice: if no PC is
+available, the Owner can't create or correct an order, and separately
+there was no way for *anyone* to edit an order's details after
+creation at all (not even the PC who made it) — a typo in machine
+name meant a direct database fix. Since the first point is an
+access-control decision, not a bug, it was put to the Owner rather
+than changed unilaterally; both were confirmed:
+
+- `POST /api/orders` widened to `project_coordinator` **and**
+  `company_owner` (PC stays the normal day-to-day path).
+  `ProjectDetailPage`'s form gate matches.
+- New `PATCH /api/orders/{id}` (`OrderRepository::update()`) for
+  correcting machine name/spec, supplier, engineer, PC override, and
+  start date — deliberately excludes `status` and
+  `target_handover_date`, which keep their own audited
+  transition/commitment-change endpoints rather than becoming a plain
+  UPDATE. New `OrderEditForm` component on `OrderDetailPage`, PC/Owner.
+- `PATCH /api/orders/{id}/target-handover-date` has existed since
+  Phase 1 (reason + Sales Manager/Owner approver, recorded as a
+  `commitment_changes` row) but never had a UI — added as a small
+  sub-form (PC/Sales Manager/Owner, matching its own existing role
+  gate), rather than folding the date into the plain edit form above
+  and losing that audit trail.
+
+Verified live: Owner creates an order directly on a project that
+already had none from that role; PC edits an existing order's machine
+name and confirms it's reflected immediately; PC requests a target
+handover date change with a reason and a Sales Manager approver and
+confirms the new date sticks. Two new regression tests
+(`e2e/order-edit.spec.ts`); full suite now 17/17.

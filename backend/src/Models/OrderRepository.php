@@ -138,6 +138,37 @@ final class OrderRepository
     }
 
     /**
+     * Corrects an order's own details (machine name/spec, supplier,
+     * engineer, PC override, start date) — never status or
+     * target_handover_date, which go through their own audited paths
+     * below instead of a plain UPDATE.
+     *
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    public static function update(int $id, array $data): array
+    {
+        $fields = ['machine_name', 'machine_spec', 'supplier_id', 'installation_engineer_id',
+            'project_coordinator_id', 'start_date'];
+        $sets = [];
+        $params = ['id' => $id];
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $data)) {
+                $sets[] = "{$field} = :{$field}";
+                $params[$field] = $data[$field];
+            }
+        }
+
+        if ($sets !== []) {
+            Database::connection()
+                ->prepare('UPDATE orders SET ' . implode(', ', $sets) . ' WHERE id = :id')
+                ->execute($params);
+        }
+
+        return self::findByIdUnscoped($id);
+    }
+
+    /**
      * Order-level lifecycle change (active/on_hold/cancelled/completed) —
      * always logged, never a silent UPDATE. Caller has already verified
      * the requester is a Sales Manager or Company Owner (§ARCHITECTURE.md §2).

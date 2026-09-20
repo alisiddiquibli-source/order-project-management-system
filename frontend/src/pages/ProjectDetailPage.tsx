@@ -7,9 +7,11 @@ import type { Order, Project, Supplier, User } from '../lib/types'
 
 /**
  * A project's orders (machines) — list plus creation. Order creation is
- * PC-only, matching the backend's own role gate (POST /api/orders); this
- * form previously didn't exist at all anywhere in the app, so an order
- * could only ever be created by calling the API directly.
+ * PC or Owner, matching the backend's own role gate (POST /api/orders) —
+ * widened from PC-only after live testing showed the Owner had no way to
+ * create (or fix) an order without a PC account; this form previously
+ * didn't exist at all anywhere in the app, so an order could only ever be
+ * created by calling the API directly.
  */
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,7 +22,7 @@ export function ProjectDetailPage() {
   const [engineers, setEngineers] = useState<User[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const canCreateOrder = user?.role === 'project_coordinator'
+  const canCreateOrder = user && ['project_coordinator', 'company_owner'].includes(user.role)
 
   const [orderNumber, setOrderNumber] = useState('')
   const [machineName, setMachineName] = useState('')

@@ -27,7 +27,11 @@ $router->get('/api/orders/{id}', function (Request $request, array $params): voi
 
 $router->post('/api/orders', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['project_coordinator']);
+    // PC is the normal day-to-day path; the Owner can also enter an order
+    // directly rather than being blocked when no PC is available (§2 gives
+    // the Owner full visibility — this only widens who can additionally
+    // create the record, not who's accountable for running it day to day).
+    Authenticator::requireRole($request, ['project_coordinator', 'company_owner']);
 
     $body = $request->body;
     $required = ['project_id', 'order_number', 'machine_name', 'supplier_id',
@@ -58,6 +62,33 @@ $router->post('/api/orders', function (Request $request): void {
 
     $order = OrderRepository::create($body, (int) $claims['sub']);
     Response::json($order, 201);
+});
+
+// General correction of an order's own details — deliberately separate
+// from status (has its own audited transition) and target_handover_date
+// (has its own reason+approver-audited endpoint below): those two are
+// commitments that need a trail, this is just fixing a typo/reassignment.
+$router->patch('/api/orders/{id}', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['project_coordinator', 'company_owner']);
+
+    $orderId = (int) $params['id'];
+    OrderAccess::requireVisibleOrder($orderId, $claims);
+
+    $body = $request->body;
+    if (isset($body['supplier_id']) && !OrderRepository::supplierExists((int) $body['supplier_id'])) {
+        Response::error('supplier_id does not reference a known supplier.', 422);
+    }
+    if (isset($body['installation_engineer_id'])
+        && !OrderRepository::userExistsWithRole((int) $body['installation_engineer_id'], 'installation_engineer')) {
+        Response::error('installation_engineer_id must reference an active user with role installation_engineer.', 422);
+    }
+    if (!empty($body['project_coordinator_id'])
+        && !OrderRepository::userExistsWithRole((int) $body['project_coordinator_id'], 'project_coordinator')) {
+        Response::error('project_coordinator_id must reference an active user with role project_coordinator.', 422);
+    }
+
+    Response::json(OrderRepository::update($orderId, $body));
 });
 
 $router->patch('/api/orders/{id}/status', function (Request $request, array $params): void {
