@@ -54,6 +54,15 @@ export function OrderDetailPage() {
       )}
 
       {order && (
+        <div className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
+          <Field label="Sales Manager" value={order.sales_manager_name ?? '—'} />
+          <Field label="Project Coordinator" value={order.project_coordinator_name ?? '—'} />
+          <Field label="Installation Engineer" value={order.installation_engineer_name ?? '—'} />
+          <Field label="Supplier" value={order.supplier_name ?? '—'} />
+        </div>
+      )}
+
+      {order && (
         <div className="mb-6">
           <OrderEditForm order={order} onUpdated={reload} />
         </div>

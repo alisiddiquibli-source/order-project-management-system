@@ -22,6 +22,7 @@ export function OrderPortfolioTable({ orders }: { orders: OrderWithStages[] }) {
           <tr>
             <th className="px-4 py-3 font-medium">Order</th>
             <th className="px-4 py-3 font-medium">Machine</th>
+            <th className="px-4 py-3 font-medium">Coordinator</th>
             <th className="px-4 py-3 font-medium">Progress</th>
             <th className="px-4 py-3 font-medium">Current stage</th>
             <th className="px-4 py-3 font-medium">Target handover</th>
@@ -39,6 +40,7 @@ export function OrderPortfolioTable({ orders }: { orders: OrderWithStages[] }) {
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-slate-700">{order.machine_name}</td>
+                <td className="px-4 py-3 text-slate-500">{order.project_coordinator_name ?? '—'}</td>
                 <td className="px-4 py-3">
                   <ProgressBar completed={completed} total={order.stages.length} />
                 </td>
@@ -58,7 +60,7 @@ export function OrderPortfolioTable({ orders }: { orders: OrderWithStages[] }) {
           })}
           {orders.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+              <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                 No orders yet.
               </td>
             </tr>

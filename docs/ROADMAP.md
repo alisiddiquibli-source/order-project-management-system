@@ -609,3 +609,60 @@ name and confirms it's reflected immediately; PC requests a target
 handover date change with a reason and a Sales Manager approver and
 confirms the new date sticks. Two new regression tests
 (`e2e/order-edit.spec.ts`); full suite now 17/17.
+
+**Assignment (Sales Manager/PC/Engineer/Supplier) was invisible
+everywhere in the UI — flagged live.** The Owner pointed out that
+who's actually responsible for an order (Sales Manager, PC, Engineer,
+Supplier) was never shown anywhere: not on the order detail page, not
+in the Owner/Sales Manager/Import Manager portfolio table. The data
+was always there (`orders.supplier_id`/`installation_engineer_id`/
+`project_coordinator_id`, `projects.sales_manager_id`), just never
+surfaced. Fixed:
+
+- `OrderRepository` gained a shared `SELECT_WITH_ASSIGNEES` query
+  (used by both `findVisibleToUser` and `findByIdForUser`) that
+  resolves all four to names via joins, including the PC fallback
+  (`effective_project_coordinator_id`/`project_coordinator_name` —
+  the order's own override if set, else the project's default PC —
+  the same fallback `Scope::forOrders` already used for visibility,
+  now surfaced consistently rather than re-derived ad hoc).
+- `OrderDetailPage` shows all four in a dedicated info row.
+- `OrderPortfolioTable` (shared by Owner/Sales Manager/Import Manager
+  dashboards) gained a Coordinator column.
+- Took the opportunity to also view the Sales Manager and PC
+  dashboards directly (screenshotted locally) to confirm they exist
+  and are substantive, not placeholders, since the Owner hadn't seen
+  either firsthand yet.
+
+Same round, the Owner also specified the actual assignment/edit
+permission model, since order editing had just been built PC/Owner-only
+with no Sales Manager role at all:
+
+- `PATCH /api/orders/{id}` now also allows Sales Manager, but with a
+  field-level restriction (rejects the request if it includes anything
+  other than `project_coordinator_id`/`installation_engineer_id`/
+  `start_date`) — Sales Manager can reassign the PC/Engineer and correct
+  the start date, never machine details or the supplier, which stay a
+  PC/Owner call.
+- `OrderEditForm` now has two tiers matching that gate: PC/Owner see
+  every field; Sales Manager sees only the PC/Engineer pickers and the
+  start date. Also added a PC-reassignment picker and a start-date
+  field to the form itself — neither existed before even for PC/Owner.
+
+Verified live: Sales Manager's edit form shows no machine-name/spec/
+supplier fields at all and successfully reassigns the Engineer and
+start date. New regression test in `e2e/order-edit.spec.ts`; full
+suite now 18/18.
+
+Confirmed unchanged (already matched what the Owner described):
+Project creation stays Sales Manager/PC/Owner, deletion stays Owner-only.
+
+**Open question, not yet decided:** the Owner also asked that when the
+Owner creates an order, the start/target-handover dates be optional
+(left for the Sales Manager/PC to fill in afterward). Both columns are
+`NOT NULL` in the schema, and `check_stage_deadlines.php` and the
+dashboards' "at risk"/progress logic assume a real date — making them
+genuinely nullable means auditing and updating that logic too, not just
+relaxing a form field. Not implemented yet pending that decision (see
+conversation) — this is a real design fork, not a rounding error, so it
+wasn't decided unilaterally.

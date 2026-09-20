@@ -18,10 +18,15 @@ test('PC uploads a FAT report and attaches it to the recorded result', async ({ 
   await page.click('button:has-text("Schedule FAT")')
   await expect(page.locator('text=FAT report & photos')).toBeVisible()
 
-  // Upload a report through the newly-added DocumentsSection.
-  await page.locator('input[type="file"]').setInputFiles(filePath)
-  await page.click('button:has-text("Upload")')
-  await expect(page.locator('text=fat_report')).toBeVisible()
+  // Upload a report through the newly-added DocumentsSection. Scoped to
+  // that section specifically — FatSatSection's own report-document
+  // dropdown also renders an option with this same text once its refresh
+  // lands, so an unscoped locator is ambiguous (strict-mode violation)
+  // depending on exactly how fast that refresh happens.
+  const documentsSection = page.locator('h3', { hasText: 'FAT report & photos' }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await documentsSection.locator('input[type="file"]').setInputFiles(filePath)
+  await documentsSection.locator('button:has-text("Upload")').click()
+  await expect(documentsSection.locator('text=fat_report')).toBeVisible()
 
   // The sibling FatSatSection's report-document picker must see the new
   // upload without a page reload (regression test for the cross-component

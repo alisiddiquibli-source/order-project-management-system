@@ -27,8 +27,7 @@ final class OrderRepository
         }
 
         $stmt = Database::connection()->prepare(
-            "SELECT o.* FROM orders o
-             JOIN projects pr ON pr.id = o.project_id
+            self::SELECT_WITH_ASSIGNEES . "
              WHERE {$scope['sql']} {$projectFilter}
              ORDER BY o.created_at DESC"
         );
@@ -36,6 +35,29 @@ final class OrderRepository
 
         return array_map(fn (array $order) => self::redactForRole($order, $claims), $stmt->fetchAll());
     }
+
+    /**
+     * Every dashboard/list/detail view needs "who's actually responsible
+     * for this" (Sales Manager from the project, effective PC — the
+     * order's own override or the project's default, Engineer, Supplier)
+     * resolved to names, not left as bare ids for the caller to look up —
+     * this was previously invisible everywhere in the UI. Shared by every
+     * SELECT below so the resolution logic (especially the PC fallback)
+     * lives in exactly one place.
+     */
+    private const SELECT_WITH_ASSIGNEES = 'SELECT o.*,
+             pr.sales_manager_id AS sales_manager_id,
+             smu.name AS sales_manager_name,
+             COALESCE(o.project_coordinator_id, pr.project_coordinator_id) AS effective_project_coordinator_id,
+             pcu.name AS project_coordinator_name,
+             eng.name AS installation_engineer_name,
+             sup.name AS supplier_name
+         FROM orders o
+         JOIN projects pr ON pr.id = o.project_id
+         LEFT JOIN users smu ON smu.id = pr.sales_manager_id
+         LEFT JOIN users pcu ON pcu.id = COALESCE(o.project_coordinator_id, pr.project_coordinator_id)
+         LEFT JOIN users eng ON eng.id = o.installation_engineer_id
+         LEFT JOIN suppliers sup ON sup.id = o.supplier_id';
 
     /**
      * @param array<string, mixed> $claims
@@ -46,9 +68,7 @@ final class OrderRepository
         $scope = Scope::forOrders($claims);
 
         $stmt = Database::connection()->prepare(
-            "SELECT o.* FROM orders o
-             JOIN projects pr ON pr.id = o.project_id
-             WHERE o.id = :id AND {$scope['sql']}"
+            self::SELECT_WITH_ASSIGNEES . " WHERE o.id = :id AND {$scope['sql']}"
         );
         $stmt->execute(['id' => $id, ...$scope['params']]);
         $order = $stmt->fetch();

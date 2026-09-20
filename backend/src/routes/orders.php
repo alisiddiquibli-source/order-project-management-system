@@ -68,14 +68,27 @@ $router->post('/api/orders', function (Request $request): void {
 // from status (has its own audited transition) and target_handover_date
 // (has its own reason+approver-audited endpoint below): those two are
 // commitments that need a trail, this is just fixing a typo/reassignment.
+//
+// PC/Owner can correct anything here. Sales Manager gets a narrower slice
+// — reassigning the PC or Engineer, and the start date — never machine
+// details or the supplier, which stay a PC/Owner call.
 $router->patch('/api/orders/{id}', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['project_coordinator', 'company_owner']);
+    Authenticator::requireRole($request, ['project_coordinator', 'company_owner', 'sales_manager']);
 
     $orderId = (int) $params['id'];
     OrderAccess::requireVisibleOrder($orderId, $claims);
 
     $body = $request->body;
+
+    if ($claims['role'] === 'sales_manager') {
+        $allowedFields = ['project_coordinator_id', 'installation_engineer_id', 'start_date'];
+        $disallowed = array_diff(array_keys($body), $allowedFields);
+        if ($disallowed !== []) {
+            Response::error('A Sales Manager can only reassign the PC/Engineer or change the start date.', 403);
+        }
+    }
+
     if (isset($body['supplier_id']) && !OrderRepository::supplierExists((int) $body['supplier_id'])) {
         Response::error('supplier_id does not reference a known supplier.', 422);
     }

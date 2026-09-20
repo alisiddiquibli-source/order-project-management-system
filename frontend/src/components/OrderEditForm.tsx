@@ -6,44 +6,59 @@ import type { Order, Supplier, User } from '../lib/types'
 /**
  * Corrects an order's own details after creation — previously there was
  * no way to fix a typo or reassignment at all short of a direct database
- * edit. PC/Owner only, matching who can create an order (§ARCHITECTURE.md
- * — order creation was widened from PC-only after live testing showed the
- * Owner had no way to create or fix an order without a PC account).
+ * edit. Two tiers, matching the backend's own field-level gate on
+ * PATCH /api/orders/{id}: PC/Owner can correct anything (machine details,
+ * supplier, engineer, PC, start date); Sales Manager gets a narrower slice
+ * — reassigning the PC/Engineer and the start date, never machine details
+ * or the supplier.
  */
 export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: () => Promise<void> }) {
   const { user } = useAuth()
-  const canEdit = user && ['project_coordinator', 'company_owner'].includes(user.role)
+  const canEditFull = user && ['project_coordinator', 'company_owner'].includes(user.role)
+  const canReassign = user && ['project_coordinator', 'company_owner', 'sales_manager'].includes(user.role)
 
   const [machineName, setMachineName] = useState(order.machine_name)
   const [machineSpec, setMachineSpec] = useState(order.machine_spec ?? '')
   const [supplierId, setSupplierId] = useState(String(order.supplier_id))
   const [engineerId, setEngineerId] = useState(String(order.installation_engineer_id))
+  const [coordinatorId, setCoordinatorId] = useState(order.effective_project_coordinator_id ? String(order.effective_project_coordinator_id) : '')
+  const [startDate, setStartDate] = useState(order.start_date)
   const [suppliers, setSuppliers] = useState<Supplier[] | null>(null)
   const [engineers, setEngineers] = useState<User[] | null>(null)
+  const [coordinators, setCoordinators] = useState<User[] | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!canEdit) return
-    Promise.all([
-      api.get<Supplier[]>('/suppliers').then(setSuppliers),
+    if (!canReassign) return
+    const requests: Promise<unknown>[] = [
       api.get<User[]>('/users?role=installation_engineer').then(setEngineers),
-    ]).catch(() => setError('Could not load suppliers/engineers.'))
+      api.get<User[]>('/users?role=project_coordinator').then(setCoordinators),
+    ]
+    if (canEditFull) {
+      requests.push(api.get<Supplier[]>('/suppliers').then(setSuppliers))
+    }
+    Promise.all(requests).catch(() => setError('Could not load suppliers/engineers/coordinators.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEdit])
+  }, [canReassign, canEditFull])
 
   async function handleSave() {
     setSubmitting(true)
     setError(null)
     setSaved(false)
     try {
-      await api.patch(`/orders/${order.id}`, {
-        machine_name: machineName,
-        machine_spec: machineSpec || null,
-        supplier_id: Number(supplierId),
+      const body: Record<string, string | number | null> = {
         installation_engineer_id: Number(engineerId),
-      })
+        project_coordinator_id: Number(coordinatorId),
+        start_date: startDate,
+      }
+      if (canEditFull) {
+        body.machine_name = machineName
+        body.machine_spec = machineSpec || null
+        body.supplier_id = Number(supplierId)
+      }
+      await api.patch(`/orders/${order.id}`, body)
       setSaved(true)
       await onUpdated()
     } catch (err) {
@@ -53,7 +68,7 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
     }
   }
 
-  if (!canEdit) return null
+  if (!canReassign) return null
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -62,24 +77,36 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
       {saved && <p className="mb-2 text-sm text-emerald-600">Saved.</p>}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input
-          type="text"
-          placeholder="Machine name"
-          value={machineName}
-          onChange={(e) => setMachineName(e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <input
-          type="text"
-          placeholder="Machine spec"
-          value={machineSpec}
-          onChange={(e) => setMachineSpec(e.target.value)}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-          {suppliers?.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
+        {canEditFull && (
+          <>
+            <input
+              type="text"
+              placeholder="Machine name"
+              value={machineName}
+              onChange={(e) => setMachineName(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <input
+              type="text"
+              placeholder="Machine spec"
+              value={machineSpec}
+              onChange={(e) => setMachineSpec(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+              {suppliers?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        <select value={coordinatorId} onChange={(e) => setCoordinatorId(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+          <option value="">Project Coordinator…</option>
+          {coordinators?.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.email})
             </option>
           ))}
         </select>
@@ -90,12 +117,19 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
             </option>
           ))}
         </select>
+        <input
+          type="date"
+          title="Start date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
       </div>
 
       <button
         type="button"
         onClick={handleSave}
-        disabled={submitting || !machineName || !supplierId || !engineerId}
+        disabled={submitting || (canEditFull && (!machineName || !supplierId)) || !engineerId || !coordinatorId || !startDate}
         className="mt-3 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
       >
         Save changes

@@ -48,3 +48,20 @@ test('PC edits an existing order and requests a target handover date change', as
   await expect(dateForm.locator('text=Target handover date updated.')).toBeVisible({ timeout: 10_000 })
   await expect(page.locator('text=2026-08-15')).toBeVisible()
 })
+
+test('Sales Manager can reassign PC/Engineer and the start date, but not machine details', async ({ page }) => {
+  await login(page, 'sana@businesslinks-pk.com', 'Password123!')
+  await page.goto('/orders/1')
+
+  const editForm = page.locator('h3:has-text("Edit order details")').locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  await expect(editForm).toBeVisible()
+
+  // Sales Manager's slice is narrower — no machine name/spec/supplier
+  // fields at all, only PC/Engineer/start date.
+  await expect(editForm.locator('input[placeholder="Machine name"]')).toHaveCount(0)
+
+  await editForm.locator('select').nth(1).selectOption({ label: 'Eng Engineer (eng@businesslinks-pk.com)' })
+  await editForm.locator('input[title="Start date"]').fill('2026-02-01')
+  await editForm.locator('button:has-text("Save changes")').click()
+  await expect(editForm.locator('text=Saved.')).toBeVisible({ timeout: 10_000 })
+})

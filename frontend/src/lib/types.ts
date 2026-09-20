@@ -49,6 +49,16 @@ export interface Order {
   target_handover_date: string
   project_coordinator_id: number | null
   installation_engineer_id: number
+  // Resolved names — who's actually responsible for this order. Sales
+  // Manager comes from the parent project; effective_project_coordinator_id
+  // /project_coordinator_name already account for the order-level override
+  // falling back to the project's default PC when null.
+  sales_manager_id: number
+  sales_manager_name: string | null
+  effective_project_coordinator_id: number | null
+  project_coordinator_name: string | null
+  installation_engineer_name: string | null
+  supplier_name: string | null
 }
 
 export interface Project {
