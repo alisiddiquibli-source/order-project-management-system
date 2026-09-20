@@ -23,6 +23,9 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
 
   const canCreateOrder = user && ['project_coordinator', 'company_owner'].includes(user.role)
+  // The Owner may leave dates for the Sales Manager/PC to fill in
+  // afterward — a PC creating the order still has to know them.
+  const datesOptional = user?.role === 'company_owner'
 
   const [orderNumber, setOrderNumber] = useState('')
   const [machineName, setMachineName] = useState('')
@@ -77,8 +80,8 @@ export function ProjectDetailPage() {
         machine_spec: machineSpec || undefined,
         supplier_id: Number(supplierId),
         installation_engineer_id: Number(engineerId),
-        start_date: startDate,
-        target_handover_date: targetHandoverDate,
+        start_date: startDate || undefined,
+        target_handover_date: targetHandoverDate || undefined,
       })
       setOrderNumber('')
       setMachineName('')
@@ -172,6 +175,13 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
+          {datesOptional && (
+            <p className="mt-2 text-xs text-slate-400">
+              Dates are optional for you — leave blank and the Sales Manager or PC will set the real dates
+              afterward (a placeholder start/target-handover date is used in the meantime).
+            </p>
+          )}
+
           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
             <span className="text-xs text-slate-400">No supplier yet? Add one:</span>
             <input
@@ -195,7 +205,12 @@ export function ProjectDetailPage() {
             type="button"
             onClick={handleCreateOrder}
             disabled={
-              submitting || !orderNumber || !machineName || !supplierId || !engineerId || !startDate || !targetHandoverDate
+              submitting ||
+              !orderNumber ||
+              !machineName ||
+              !supplierId ||
+              !engineerId ||
+              (!datesOptional && (!startDate || !targetHandoverDate))
             }
             className="mt-3 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
           >

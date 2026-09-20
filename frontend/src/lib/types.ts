@@ -158,7 +158,7 @@ export interface DocumentRecord {
   order_stage_id: number | null
   fat_sat_record_id: number | null
   type: string
-  storage_type: 'local' | 'google_drive'
+  storage_type: 'local' | 'google_drive' | 'link'
   file_path: string
   uploaded_by: number
   visibility: DocumentVisibility

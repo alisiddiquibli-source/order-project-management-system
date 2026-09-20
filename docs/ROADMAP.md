@@ -666,3 +666,43 @@ genuinely nullable means auditing and updating that logic too, not just
 relaxing a form field. Not implemented yet pending that decision (see
 conversation) — this is a real design fork, not a rounding error, so it
 wasn't decided unilaterally.
+
+**Resolved: Owner's dates are now optional, via placeholder defaults —
+not nullable columns.** Given the choice above, went with placeholder
+dates rather than a schema/cron change. `POST /api/orders` only
+requires `start_date`/`target_handover_date` from non-Owner creators;
+an Owner-created order missing either defaults to today / today+90 days
+(a typical capital-equipment lead time, not a real commitment) so the
+record is immediately usable, with the Sales Manager/PC expected to
+correct it via the edit form already built. `ProjectDetailPage`'s form
+matches (dates not required in the disabled-button check for the
+Owner, with a note explaining the default). Verified live
+(`e2e/owner-optional-dates.spec.ts`).
+
+**Added: a document can be a plain external link, not just a local
+upload.** The Owner asked for a way to reference a FAT/SAT (or other)
+video already hosted on YouTube or elsewhere, rather than only local
+uploads/Google Drive. `documents.storage_type` gained a third value,
+`'link'` (`file_path` = the URL itself, validated as http(s) via
+`FILTER_VALIDATE_URL`) — both `POST /orders/{id}/documents` and
+`POST /projects/{id}/documents` accept it, and `GET
+/documents/{id}/file` returns the URL as JSON for it, matching the
+existing `google_drive` pattern. `DocumentsSection` and
+`ProjectMediaPage` both gained an "Or a link" input alongside the file
+upload, and render an "Open link" link for it in the document list.
+No re-hosting, no YouTube API integration — this is deliberately just a
+reference, the same trade-off already recorded for `google_drive`
+(§4.3.1's access-control note applies here too, at even weaker
+strength, since anyone with the URL can open it — treat it as
+non-sensitive by design, not something with the same visibility
+enforcement local files get).
+
+**Schema migration needed on the live database** (not yet applied —
+give this to Chrome alongside the code deploy):
+```sql
+ALTER TABLE documents MODIFY storage_type ENUM('local','google_drive','link') NOT NULL DEFAULT 'local';
+```
+
+Verified live: PC adds a link to a stage document, Sales Manager adds
+a link as general project media, both show "Open link" pointing at the
+real URL. Two new regression tests; full suite now 21/21.

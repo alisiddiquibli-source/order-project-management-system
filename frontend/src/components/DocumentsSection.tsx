@@ -8,13 +8,16 @@ import type { DocumentRecord } from '../lib/types'
  * Document upload + list for one stage (docs/ARCHITECTURE.md §4.3.1).
  * Local files (including FAT/SAT photos/video) go through the
  * authenticated download endpoint and get an inline preview via
- * DocumentPreview; this form only covers local uploads. The architecture
- * doc originally called for photo/video to go to Google Drive instead, to
- * avoid filling Bluehost's disk quota — deliberately not built given
- * actual volume (~15 files/month), which local storage handles fine.
- * Revisit if volume grows enough for that to become a real risk; the
- * backend already accepts `storage_type: 'google_drive'` (a Drive file id
- * as `file_path`), this form just doesn't have the upload UI for it.
+ * DocumentPreview. The architecture doc originally called for photo/video
+ * to go to Google Drive instead, to avoid filling Bluehost's disk quota —
+ * deliberately not built given actual volume (~15 files/month), which
+ * local storage handles fine. Revisit if volume grows enough for that to
+ * become a real risk; the backend already accepts `storage_type:
+ * 'google_drive'` (a Drive file id as `file_path`), this form just
+ * doesn't have the upload UI for it. It does support `storage_type:
+ * 'link'` — a plain URL for a video/file already hosted elsewhere (e.g.
+ * a FAT/SAT video someone uploaded to YouTube themselves), which needs
+ * no storage of ours at all.
  *
  * @param suggestedType pre-fills the type field for stages with one
  *   canonical document (e.g. 'PO' for stage 2) — still editable, since a
@@ -39,6 +42,7 @@ export function DocumentsSection({
   const [documents, setDocuments] = useState<DocumentRecord[] | null>(null)
   const [type, setType] = useState(suggestedType)
   const [file, setFile] = useState<File | null>(null)
+  const [linkUrl, setLinkUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,6 +79,27 @@ export function DocumentsSection({
     }
   }
 
+  async function handleAddLink() {
+    if (linkUrl.trim() === '' || type.trim() === '') return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.post(`/orders/${orderId}/documents`, {
+        type,
+        storage_type: 'link',
+        order_stage_id: orderStageId,
+        file_path: linkUrl.trim(),
+      })
+      setLinkUrl('')
+      await reload()
+      onUploaded?.()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the link.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   async function handleDownload(doc: DocumentRecord) {
     try {
       await downloadDocument(doc.id, `${doc.type}-${doc.id}`)
@@ -102,6 +127,10 @@ export function DocumentsSection({
                   className="text-brand-600 hover:underline"
                 >
                   View in Drive
+                </a>
+              ) : doc.storage_type === 'link' ? (
+                <a href={doc.file_path} target="_blank" rel="noreferrer" className="text-brand-600 hover:underline">
+                  Open link
                 </a>
               ) : (
                 <button type="button" onClick={() => handleDownload(doc)} className="text-brand-600 hover:underline">
@@ -136,6 +165,27 @@ export function DocumentsSection({
             className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
           >
             Upload
+          </button>
+        </div>
+      )}
+
+      {canUpload && (
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <span className="self-center text-xs text-slate-400 sm:w-40">Or a link (e.g. YouTube video):</span>
+          <input
+            type="url"
+            placeholder="https://…"
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleAddLink}
+            disabled={submitting || linkUrl.trim() === ''}
+            className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            Add link
           </button>
         </div>
       )}

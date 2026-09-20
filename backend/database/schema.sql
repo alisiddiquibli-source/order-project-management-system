@@ -271,8 +271,11 @@ CREATE TABLE documents (
     fat_sat_record_id       INT UNSIGNED NULL,
     type                    VARCHAR(50) NOT NULL,  -- e.g. PO, FAT_report, SAT_report, BOL, handover_certificate
     -- 'google_drive' for FAT/SAT photo/video (file_path = Drive file ID);
-    -- 'local' for everything else (file_path = local relative path)
-    storage_type            ENUM('local','google_drive') NOT NULL DEFAULT 'local',
+    -- 'local' for everything else (file_path = local relative path);
+    -- 'link' for a plain external URL (file_path = the URL itself) — e.g. a
+    -- FAT/SAT video someone already uploaded to YouTube or elsewhere,
+    -- referenced rather than re-hosted (docs/ROADMAP.md).
+    storage_type            ENUM('local','google_drive','link') NOT NULL DEFAULT 'local',
     file_path               VARCHAR(500) NOT NULL,
     uploaded_by             INT UNSIGNED NOT NULL,
     visibility              ENUM('internal','supplier','customer','shared') NOT NULL DEFAULT 'internal',

@@ -81,14 +81,19 @@ $router->post('/api/orders/{id}/documents', function (Request $request, array $p
 
     $type = (string) ($request->body['type'] ?? '');
     $storageType = (string) ($request->body['storage_type'] ?? 'local');
-    if ($type === '' || !in_array($storageType, ['local', 'google_drive'], true)) {
-        Response::error('type is required and storage_type must be local|google_drive.', 422);
+    if ($type === '' || !in_array($storageType, ['local', 'google_drive', 'link'], true)) {
+        Response::error('type is required and storage_type must be local|google_drive|link.', 422);
     }
 
     if ($storageType === 'google_drive') {
         $filePath = (string) ($request->body['file_path'] ?? '');
         if ($filePath === '') {
             Response::error('file_path (the Google Drive file ID) is required for storage_type=google_drive.', 422);
+        }
+    } elseif ($storageType === 'link') {
+        $filePath = (string) ($request->body['file_path'] ?? '');
+        if (!filter_var($filePath, FILTER_VALIDATE_URL) || !str_starts_with($filePath, 'http')) {
+            Response::error('file_path must be a valid http(s) URL for storage_type=link.', 422);
         }
     } else {
         $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
@@ -151,27 +156,38 @@ $router->post('/api/projects/{id}/documents', function (Request $request, array 
         Response::error('type is required.', 422);
     }
 
-    $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
-    if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
-        Response::error('The file is too large for this server to accept.', 422);
-    }
-    if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
-        Response::error('A file upload is required.', 422);
+    $storageType = (string) ($request->body['storage_type'] ?? 'local');
+    if (!in_array($storageType, ['local', 'link'], true)) {
+        Response::error('storage_type must be local|link.', 422);
     }
 
-    try {
-        $filePath = DocumentRepository::storeUploadedFile(
-            $request->files['file']['tmp_name'],
-            $request->files['file']['name'],
-        );
-    } catch (\InvalidArgumentException $e) {
-        Response::error($e->getMessage(), 422);
+    if ($storageType === 'link') {
+        $filePath = (string) ($request->body['file_path'] ?? '');
+        if (!filter_var($filePath, FILTER_VALIDATE_URL) || !str_starts_with($filePath, 'http')) {
+            Response::error('file_path must be a valid http(s) URL for storage_type=link.', 422);
+        }
+    } else {
+        $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+        if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+            Response::error('The file is too large for this server to accept.', 422);
+        }
+        if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
+            Response::error('A file upload is required.', 422);
+        }
+        try {
+            $filePath = DocumentRepository::storeUploadedFile(
+                $request->files['file']['tmp_name'],
+                $request->files['file']['name'],
+            );
+        } catch (\InvalidArgumentException $e) {
+            Response::error($e->getMessage(), 422);
+        }
     }
 
     $document = DocumentRepository::create([
         'project_id' => $projectId,
         'type' => $type,
-        'storage_type' => 'local',
+        'storage_type' => $storageType,
         'file_path' => $filePath,
         'visibility' => $request->body['visibility'] ?? 'internal',
     ], (int) $claims['sub']);
@@ -198,6 +214,9 @@ $router->get('/api/documents/{id}/file', function (Request $request, array $para
         // The link is only ever handed to a requester who already passed
         // the visibility check above — never exposed to anyone else (§4.3.1).
         Response::json(['storage_type' => 'google_drive', 'drive_file_id' => $document['file_path']]);
+    }
+    if ($document['storage_type'] === 'link') {
+        Response::json(['storage_type' => 'link', 'url' => $document['file_path']]);
     }
 
     $absolutePath = DocumentRepository::storageDir() . '/' . $document['file_path'];

@@ -34,12 +34,29 @@ $router->post('/api/orders', function (Request $request): void {
     Authenticator::requireRole($request, ['project_coordinator', 'company_owner']);
 
     $body = $request->body;
-    $required = ['project_id', 'order_number', 'machine_name', 'supplier_id',
-        'start_date', 'target_handover_date', 'installation_engineer_id'];
+    $required = ['project_id', 'order_number', 'machine_name', 'supplier_id', 'installation_engineer_id'];
+    // Only the Owner gets to leave the dates for the Sales Manager/PC to
+    // fill in afterward — a PC creating the order still has to know them.
+    if ($claims['role'] !== 'company_owner') {
+        $required[] = 'start_date';
+        $required[] = 'target_handover_date';
+    }
     foreach ($required as $field) {
         if (empty($body[$field])) {
             Response::error("Field '{$field}' is required.", 422);
         }
+    }
+
+    // Placeholder dates for an Owner-created order missing them — start
+    // today, target handover in 90 days (a typical capital-equipment lead
+    // time, not a real commitment) — so the record is usable immediately;
+    // the Sales Manager/PC corrects these to the real dates afterward via
+    // the order's own edit form.
+    if (empty($body['start_date'])) {
+        $body['start_date'] = date('Y-m-d');
+    }
+    if (empty($body['target_handover_date'])) {
+        $body['target_handover_date'] = date('Y-m-d', strtotime('+90 days'));
     }
 
     // The PC must actually have access to the project they're adding this

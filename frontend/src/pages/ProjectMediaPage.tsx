@@ -24,6 +24,7 @@ export function ProjectMediaPage() {
 
   const [type, setType] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [linkUrl, setLinkUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const canUpload = user && ['project_coordinator', 'installation_engineer', 'sales_manager', 'company_owner'].includes(user.role)
@@ -56,6 +57,26 @@ export function ProjectMediaPage() {
       await reload()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not upload the file.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleAddLink() {
+    if (linkUrl.trim() === '' || type.trim() === '') return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.post(`/projects/${id}/documents`, {
+        type,
+        storage_type: 'link',
+        file_path: linkUrl.trim(),
+      })
+      setType('')
+      setLinkUrl('')
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the link.')
     } finally {
       setSubmitting(false)
     }
@@ -107,6 +128,25 @@ export function ProjectMediaPage() {
             Not tied to a specific order or stage — for order/stage evidence (POs, FAT/SAT reports, etc.), upload from
             the order's own page instead.
           </p>
+
+          <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row">
+            <span className="self-center text-xs text-slate-400 sm:w-56">Or a link (e.g. YouTube video):</span>
+            <input
+              type="url"
+              placeholder="https://…"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={handleAddLink}
+              disabled={submitting || linkUrl.trim() === '' || type.trim() === ''}
+              className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              Add link
+            </button>
+          </div>
         </div>
       )}
 
@@ -127,6 +167,10 @@ export function ProjectMediaPage() {
                   className="shrink-0 text-brand-600 hover:underline"
                 >
                   View in Drive
+                </a>
+              ) : doc.storage_type === 'link' ? (
+                <a href={doc.file_path} target="_blank" rel="noreferrer" className="shrink-0 text-brand-600 hover:underline">
+                  Open link
                 </a>
               ) : (
                 <button type="button" onClick={() => handleDownload(doc)} className="shrink-0 text-brand-600 hover:underline">
