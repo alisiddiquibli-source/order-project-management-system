@@ -1069,3 +1069,19 @@ unscoped locator, not a real regression in the feature itself.
 
 Full suite now 27/27 (2 new tests: the Owner's reassignment from Manage
 users, and the Sales Manager's from `CustomerLoginPanel`).
+
+**Live deployment status (in progress)**: `users.php` from commit
+`3669c92` and the `index-BFYHzfls.js` frontend bundle are live on
+`m.businesslinks-pk.com`. Confirmed working: the Owner's `/users` table
+shows a Project dropdown on every Customer row. Not yet confirmed:
+`CustomerLoginPanel`'s "Wrong project? Move this login to:" control from
+a Sales Manager account — blocked on Hamza's (`hamza@businesslinks-pk.com`)
+login returning 401 with the password in hand. Recommended fix: Owner
+uses the existing "Reset password" button on his `/users` row (goes
+through `UserRepository::updatePassword()`, properly bcrypt-hashed) —
+deliberately steered away from a raw terminal/SQL password-hash edit,
+which was the other option on the table and carries real risk of a
+malformed hash or a typo locking the account out further. Once logged in
+as Hamza on a project where he's the Sales Manager, confirm the
+reassignment control appears and works, then this round is fully
+verified live.
