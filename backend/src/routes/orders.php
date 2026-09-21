@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Bli\Auth\Authenticator;
+use Bli\Domain\StageCompletionEvaluator;
 use Bli\Http\OrderAccess;
 use Bli\Http\Request;
 use Bli\Http\Response;
@@ -27,11 +28,12 @@ $router->get('/api/orders/{id}', function (Request $request, array $params): voi
 
 $router->post('/api/orders', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
-    // PC is the normal day-to-day path; the Owner can also enter an order
-    // directly rather than being blocked when no PC is available (§2 gives
-    // the Owner full visibility — this only widens who can additionally
-    // create the record, not who's accountable for running it day to day).
-    Authenticator::requireRole($request, ['project_coordinator', 'company_owner']);
+    // PC is the normal day-to-day path; Owner and Sales Manager can also
+    // enter an order directly (matching who can create the Project itself)
+    // rather than being blocked when no PC is available — this only widens
+    // who can additionally create the record, not who's accountable for
+    // running it day to day.
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner']);
 
     $body = $request->body;
     $required = ['project_id', 'order_number', 'machine_name', 'supplier_id', 'installation_engineer_id'];
@@ -168,6 +170,19 @@ $router->get('/api/orders/{id}/stages', function (Request $request, array $param
     OrderAccess::requireVisibleOrder($orderId, $claims);
 
     Response::json(OrderStageRepository::listForOrder($orderId));
+});
+
+// Read-only preview of whether a stage could be marked complete right now,
+// and why not — powers the pipeline flowchart's "what's blocking this"
+// message without requiring a failed PATCH first. Same evaluator the real
+// completion transition uses, just never actually flips the status.
+$router->get('/api/orders/{id}/stages/{stageId}/completion-status', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    $stageId = (int) $params['stageId'];
+    $stage = OrderAccess::requireVisibleStage($orderId, $stageId, $claims);
+
+    Response::json(StageCompletionEvaluator::canComplete($orderId, (int) $stage['id'], $stageId));
 });
 
 $router->patch('/api/orders/{id}/stages/{stageId}', function (Request $request, array $params): void {

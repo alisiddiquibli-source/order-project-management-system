@@ -29,6 +29,26 @@ final class StageCompletionEvaluator
     ];
 
     /**
+     * Plain names for error messages — a PC reading "Stage 5 must be
+     * completed first" has to go look up what stage 5 even is; naming it
+     * here means the message alone is actionable.
+     */
+    private const STAGE_NAMES = [
+        1 => 'Requirements captured',
+        2 => 'Order placed',
+        3 => 'Machine manufacturing progress',
+        4 => 'Machine testing material coordination',
+        5 => 'Machine FAT readiness / FAT execution',
+        6 => 'Shipment coordination',
+        7 => 'Import clearance in Pakistan',
+        8 => 'Delivery to customer',
+        9 => 'Installation at customer site',
+        10 => 'SAT (Site Acceptance Test)',
+        11 => 'Training',
+        12 => 'Handover',
+    ];
+
+    /**
      * @return array{ok: bool, reason: ?string}
      */
     public static function canComplete(int $orderId, int $orderStageId, int $stageId): array
@@ -68,9 +88,13 @@ final class StageCompletionEvaluator
                     continue;
                 }
 
+                $requiredName = self::STAGE_NAMES[$requiredStageId] ?? "stage {$requiredStageId}";
+                $exceptionNote = $stageId === 6 && $requiredStageId === 5
+                    ? ' — or a Sales Manager/Owner can approve an exception if this is a minor/procedural delay'
+                    : '';
                 return [
                     'ok' => false,
-                    'reason' => "Stage {$requiredStageId} must be completed first (or, for stage 6 only, have an approved exception).",
+                    'reason' => "\"{$requiredName}\" must be completed first{$exceptionNote}.",
                 ];
             }
         }
@@ -101,27 +125,27 @@ final class StageCompletionEvaluator
                 $db,
                 'SELECT 1 FROM requirements WHERE order_id = :order_id AND approved_at IS NOT NULL',
                 ['order_id' => $orderId],
-                'Requirements must be approved (requirements.approved_by/approved_at).'
+                'Add a requirement below, then ask a Sales Manager or the Owner to approve it, before this stage can be marked complete.'
             ),
             2 => self::check(
                 $db,
                 "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'PO'",
                 ['order_id' => $orderId],
-                'A PO document must be uploaded.'
+                "Upload the Purchase Order in the Documents section below (set its type to \"PO\") before this stage can be marked complete."
             ),
             3 => self::checkManufacturingMilestones($db, $orderStageId),
             4 => self::check(
                 $db,
                 "SELECT 1 FROM order_stages WHERE id = :id AND notes IS NOT NULL AND notes <> ''",
                 ['id' => $orderStageId],
-                'Testing material coordination needs PC-confirmed notes.'
+                'Add a note confirming testing material coordination (using the note field when updating this stage) before it can be marked complete.'
             ),
             5 => self::checkFatOrSat($db, $orderStageId, 'FAT', requireCustomerAcceptance: false),
             6 => self::check(
                 $db,
                 'SELECT 1 FROM shipments WHERE order_id = :order_id AND actual_dispatch_date IS NOT NULL',
                 ['order_id' => $orderId],
-                'Shipment needs an actual_dispatch_date — a booking alone is not dispatch.'
+                'Record the shipment\'s actual dispatch date in the Shipment section — a booking alone is not enough to mark this stage complete.'
             ),
             7 => self::checkImportTracking($db, $orderStageId, 'cleared'),
             8 => self::checkDelivery($db, $orderId, $orderStageId),
@@ -160,12 +184,12 @@ final class StageCompletionEvaluator
         $row = $stmt->fetch();
 
         if ((int) $row['total'] === 0) {
-            return ['ok' => false, 'reason' => 'Manufacturing checklist is empty — add at least one milestone.'];
+            return ['ok' => false, 'reason' => 'Add at least one manufacturing milestone below before this stage can be marked complete.'];
         }
 
         return (int) $row['total'] === (int) $row['done']
             ? ['ok' => true, 'reason' => null]
-            : ['ok' => false, 'reason' => 'Not every manufacturing milestone is done.'];
+            : ['ok' => false, 'reason' => 'Mark every manufacturing milestone as done before this stage can be marked complete.'];
     }
 
     /**
@@ -187,7 +211,7 @@ final class StageCompletionEvaluator
         $record = $stmt->fetch();
 
         if ($record === false) {
-            return ['ok' => false, 'reason' => "No {$type} record on file."];
+            return ['ok' => false, 'reason' => "Schedule and record the {$type} result before this stage can be marked complete."];
         }
 
         if ($record['result'] === 'pass') {
@@ -196,7 +220,7 @@ final class StageCompletionEvaluator
             }
             // Even a straight pass needs the customer's sign-off recorded for SAT.
         } elseif ($record['result'] !== 'conditional_pass') {
-            return ['ok' => false, 'reason' => "{$type} result is not pass or conditional_pass."];
+            return ['ok' => false, 'reason' => "The {$type} result must be Pass or Conditional Pass before this stage can move forward — a Fail requires starting a retest."];
         }
 
         $acceptanceType = $type === 'FAT' ? 'fat_conditional' : 'sat_result';
@@ -210,14 +234,14 @@ final class StageCompletionEvaluator
         $acceptance = $stmt->fetch();
 
         if ($acceptance === false) {
-            return ['ok' => false, 'reason' => "{$type} needs an acceptance record tied to this exact result."];
+            return ['ok' => false, 'reason' => "Record an acceptance for this {$type} result before this stage can be marked complete."];
         }
 
         if ($requireCustomerAcceptance && !(bool) $acceptance['constitutes_customer_acceptance']) {
             return [
                 'ok' => false,
-                'reason' => 'SAT needs genuine customer acceptance — a Sales Manager acceptance without '
-                    . 'customer_authorization_evidence_document_id does not satisfy this.',
+                'reason' => 'SAT needs the customer\'s own sign-off, not just a Sales Manager\'s — attach the '
+                    . 'customer\'s acceptance evidence document before this stage can be marked complete.',
             ];
         }
 
@@ -233,7 +257,7 @@ final class StageCompletionEvaluator
             $db,
             'SELECT 1 FROM customer_import_tracking WHERE order_stage_id = :id AND latest_status = :status',
             ['id' => $orderStageId, 'status' => $requiredStatus],
-            "customer_import_tracking.latest_status must be '{$requiredStatus}'."
+            "Update the import tracking status to \"{$requiredStatus}\" before this stage can be marked complete."
         );
     }
 
@@ -256,7 +280,7 @@ final class StageCompletionEvaluator
             $db,
             "SELECT 1 FROM documents WHERE order_id = :order_id AND type LIKE '%delivery%'",
             ['order_id' => $orderId],
-            "Delivery needs customer_import_tracking.latest_status='delivered' or a delivery document."
+            'Mark the import tracking status as "delivered", or upload a delivery document, before this stage can be marked complete.'
         );
     }
 
@@ -272,16 +296,18 @@ final class StageCompletionEvaluator
         $stmt->execute(['id' => $orderStageId, 'type' => $type]);
         $report = $stmt->fetch();
 
+        $label = $type === 'installation' ? 'installation report' : 'handover-readiness report';
+
         if ($report === false) {
-            return ['ok' => false, 'reason' => "No {$type} engineer report on file."];
+            return ['ok' => false, 'reason' => "The Installation Engineer must submit an {$label} before this stage can be marked complete."];
         }
 
         if ($report['completion_status'] !== 'complete') {
-            return ['ok' => false, 'reason' => "Engineer marked {$type} incomplete."];
+            return ['ok' => false, 'reason' => "The Installation Engineer's {$label} is marked incomplete — it must be resubmitted as complete before this stage can move forward."];
         }
 
         if (!empty($report['outstanding_issues'])) {
-            return ['ok' => false, 'reason' => 'Engineer report lists outstanding issues.'];
+            return ['ok' => false, 'reason' => "The Installation Engineer's {$label} lists outstanding issues that must be resolved first."];
         }
 
         return ['ok' => true, 'reason' => null];
@@ -300,7 +326,7 @@ final class StageCompletionEvaluator
         $record = $stmt->fetch();
 
         if ($record === false) {
-            return ['ok' => false, 'reason' => 'No training record with attendees on file.'];
+            return ['ok' => false, 'reason' => 'Record the training session and its attendees before this stage can be marked complete.'];
         }
 
         $stmt = $db->prepare(
@@ -313,7 +339,7 @@ final class StageCompletionEvaluator
         $acceptance = $stmt->fetch();
 
         if ($acceptance === false) {
-            return ['ok' => false, 'reason' => 'Training needs a training_ack acceptance tied to this record.'];
+            return ['ok' => false, 'reason' => 'Record the customer\'s acknowledgement of the training before this stage can be marked complete.'];
         }
 
         // Same genuine-customer-acceptance bar as SAT/Handover — training
@@ -321,8 +347,8 @@ final class StageCompletionEvaluator
         if (!(bool) $acceptance['constitutes_customer_acceptance']) {
             return [
                 'ok' => false,
-                'reason' => 'Training needs genuine customer acceptance — a Sales Manager acceptance without '
-                    . 'customer_authorization_evidence_document_id does not satisfy this.',
+                'reason' => 'This needs the customer\'s own sign-off, not just a Sales Manager\'s — attach the '
+                    . 'customer\'s acceptance evidence document before this stage can be marked complete.',
             ];
         }
 
@@ -350,7 +376,7 @@ final class StageCompletionEvaluator
             $db,
             "SELECT 1 FROM documents WHERE order_id = :order_id AND type LIKE '%handover%'",
             ['order_id' => $orderId],
-            'A handover certificate document must be uploaded.'
+            'Upload the handover certificate document before this stage can be marked complete.'
         );
         if (!$certificateCheck['ok']) {
             return $certificateCheck;
@@ -366,14 +392,14 @@ final class StageCompletionEvaluator
         $acceptance = $stmt->fetch();
 
         if ($acceptance === false) {
-            return ['ok' => false, 'reason' => 'Handover needs a handover_confirmation acceptance record.'];
+            return ['ok' => false, 'reason' => 'Record the customer\'s handover confirmation before this stage can be marked complete.'];
         }
 
         if (!(bool) $acceptance['constitutes_customer_acceptance']) {
             return [
                 'ok' => false,
-                'reason' => 'Handover needs genuine customer acceptance — a Sales Manager acceptance without '
-                    . 'customer_authorization_evidence_document_id does not satisfy this.',
+                'reason' => 'Handover needs the customer\'s own sign-off, not just a Sales Manager\'s — attach the '
+                    . 'customer\'s acceptance evidence document before this stage can be marked complete.',
             ];
         }
 

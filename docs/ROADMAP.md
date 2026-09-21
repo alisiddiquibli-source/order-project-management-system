@@ -735,3 +735,69 @@ Customer/Supplier dashboards were also spot-checked directly (not just
 inferred from code) — both render correctly once given a moment to
 load; an initial blank-looking screenshot was a premature capture in
 the verification script, not a real bug.
+
+**Live report: "the pipeline doesn't move forward after Requirements
+captured," Sales Manager couldn't create an order, per-stage document
+progress wasn't clear — asked for a visual flowchart, then a full
+lifecycle simulation to find and fix real flow bugs.** Investigated
+each report on its own, then ran a from-scratch 12-stage simulation
+(creation to handover) to verify.
+
+- **Sales Manager couldn't create an order**: not a bug — it was never
+  granted that permission (order creation was PC/Owner only). Widened
+  `POST /api/orders` and `ProjectDetailPage`'s form to also allow
+  `sales_manager`, matching who can create the Project itself.
+- **"Doesn't move forward"**: real root cause found —
+  `StageCompletionEvaluator`'s rejection messages referenced raw
+  database columns (`"Requirements must be approved
+  (requirements.approved_by/approved_at)."`) instead of telling a PC
+  what to actually do. Every one of the ~25 messages across all 12
+  stages rewritten in plain, actionable language (e.g. "Add a
+  requirement below, then ask a Sales Manager or the Owner to approve
+  it, before this stage can be marked complete."). The underlying
+  mechanics (requirement → approval → complete) were already correct;
+  the message just read like a system error instead of a next step.
+- **Per-stage document/progress clarity**: addressed by the new
+  flowchart below rather than a separate fix — its "Next step" line
+  surfaces exactly this.
+
+**New: `PipelineFlowchart`, a visual 12-stage flow on every order
+page, visible to every role that can see the order (including
+Customer/Supplier — it shows role names only, e.g. "Installation
+Engineer," never individual staff, so it needed no redaction).** Shows
+every stage as a connected, color-coded node; a summary panel below
+names the current stage, a static "Responsible: <role>" line per
+stage (`STAGE_RESPONSIBILITY`, kept in sync with
+`StageCompletionEvaluator`'s actual gates), and — new backend endpoint
+`GET /orders/{id}/stages/{stageId}/completion-status` (read-only,
+reuses `StageCompletionEvaluator::canComplete` without mutating
+anything) — the live blocking reason, so a PC sees "Next step: Upload
+the Purchase Order..." before ever attempting the save, not just after
+a failed one.
+
+**Full lifecycle simulation** (`e2e/full-lifecycle.spec.ts`): Sales
+Manager creates the order; PC drives stages 1-8 (requirement +
+approval, PO upload, milestones, note, FAT pass, shipment + dispatch,
+import tracking cleared, delivered); Installation Engineer submits
+stages 9/10/11/12 evidence; a real Customer login (not Sales-Manager-
+with-evidence) records the stage 10/11/12 acceptances; PC closes out
+every stage. Passes clean end to end — confirms the pipeline mechanics
+themselves were always sound.
+
+Two things worth a decision later, surfaced by the simulation, neither
+changed since they're outside what was reported broken:
+- Stages 7 and 8 (import clearance / delivery) each get their own
+  separate `customer_import_tracking` row — a PC has to "start
+  tracking" again for stage 8 rather than the stage 7 record just
+  continuing its status. Might be worth merging into one per-order
+  tracker if this proves confusing in real use.
+- Every finding above except the Sales Manager permission was actually
+  a **test-authoring bug in the simulation itself** (ambiguous
+  Playwright locators — "Accept" matching "Site Accept**ance** Test",
+  a retry helper double-clicking a toggle, substring collisions
+  between specs' fixture data) rather than an application bug — logged
+  here since diagnosing them took real effort and the pattern (prefer
+  exact-text/role matches over `has-text` substring matches) is worth
+  remembering for future specs in this suite.
+
+Full suite now 23/23.

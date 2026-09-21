@@ -44,24 +44,32 @@ test('Customer and Supplier logins never see the internal staffing row', async (
   await page.click('text=Log out')
   await expect(page).toHaveURL('/login', { timeout: 10_000 })
 
+  // Staff names specifically — not the bare role label, which the pipeline
+  // flowchart legitimately shows to every role (including these two) as
+  // part of "who's responsible for this stage." Only the *individual*
+  // assigned to that role is BLI-internal information.
   await login(page, 'redaction-customer@textilemills.example', customerPassword)
   await page.goto('/orders/1')
-  await expect(page.locator('text=Sales Manager')).toHaveCount(0)
   await expect(page.locator('text=Sana Sales')).toHaveCount(0)
   await page.click('text=Log out')
   await expect(page).toHaveURL('/login', { timeout: 10_000 })
 
   await login(page, 'redaction-supplier@acme-machines.example', supplierPassword)
   await page.goto('/orders/1')
-  await expect(page.locator('text=Project Coordinator')).toHaveCount(0)
   await expect(page.locator('text=Pia Coordinator')).toHaveCount(0)
   await page.click('text=Log out')
   await expect(page).toHaveURL('/login', { timeout: 10_000 })
 
-  // An internal role still sees the row, unaffected.
+  // An internal role still sees the row, unaffected. The "Sales Manager"
+  // Field label is an exact, standalone text node (docs/OrderDetailPage's
+  // Field component) — unlike the pipeline flowchart's "Responsible: ...
+  // Sales Manager ..." sentence, which an unscoped/substring match would
+  // also hit.
   await login(page, 'pia@businesslinks-pk.com', 'Password123!')
   await page.goto('/orders/1')
-  const staffingRow = page.locator('text=Sales Manager').locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  const staffingRow = page
+    .getByText('Sales Manager', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
   await expect(staffingRow).toBeVisible()
   await expect(staffingRow.locator('text=Sana Sales')).toBeVisible()
 })

@@ -5,6 +5,7 @@ import { AmcSection } from '../components/AmcSection'
 import { AppShell } from '../components/AppShell'
 import { CommentsPanel } from '../components/CommentsPanel'
 import { OrderEditForm } from '../components/OrderEditForm'
+import { PipelineFlowchart } from '../components/PipelineFlowchart'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
 import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
@@ -57,6 +58,8 @@ export function OrderDetailPage() {
           <Field label="Machine spec" value={order.machine_spec ?? '—'} />
         </div>
       )}
+
+      {order && stages && <PipelineFlowchart orderId={order.id} stages={stages} />}
 
       {order && isInternal && (
         <div className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4">

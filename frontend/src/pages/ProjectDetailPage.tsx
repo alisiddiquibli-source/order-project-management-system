@@ -7,11 +7,12 @@ import type { Order, Project, Supplier, User } from '../lib/types'
 
 /**
  * A project's orders (machines) — list plus creation. Order creation is
- * PC or Owner, matching the backend's own role gate (POST /api/orders) —
- * widened from PC-only after live testing showed the Owner had no way to
- * create (or fix) an order without a PC account; this form previously
- * didn't exist at all anywhere in the app, so an order could only ever be
- * created by calling the API directly.
+ * PC, Sales Manager, or Owner, matching who can create the Project itself
+ * and the backend's own role gate (POST /api/orders) — widened from
+ * PC-only after live testing showed the Owner (and, later, the Sales
+ * Manager) had no way to create or fix an order without a PC account;
+ * this form previously didn't exist at all anywhere in the app, so an
+ * order could only ever be created by calling the API directly.
  */
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -22,7 +23,7 @@ export function ProjectDetailPage() {
   const [engineers, setEngineers] = useState<User[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const canCreateOrder = user && ['project_coordinator', 'company_owner'].includes(user.role)
+  const canCreateOrder = user && ['project_coordinator', 'sales_manager', 'company_owner'].includes(user.role)
   // The Owner may leave dates for the Sales Manager/PC to fill in
   // afterward — a PC creating the order still has to know them.
   const datesOptional = user?.role === 'company_owner'
