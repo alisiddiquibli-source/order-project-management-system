@@ -71,14 +71,18 @@ final class UserRepository
     /**
      * @return array<int, array<string, mixed>>
      */
-    public static function listAll(?string $role = null): array
+    public static function listAll(?string $role = null, ?int $scopeProjectId = null): array
     {
         if ($role !== null) {
-            $stmt = Database::connection()->prepare(
-                "SELECT id, name, email, role, status, scope_project_id, supplier_id, created_at
-                 FROM users WHERE role = :role AND status = 'active' ORDER BY name"
-            );
-            $stmt->execute(['role' => $role]);
+            $sql = "SELECT id, name, email, role, status, scope_project_id, supplier_id, created_at
+                    FROM users WHERE role = :role AND status = 'active'";
+            $params = ['role' => $role];
+            if ($scopeProjectId !== null) {
+                $sql .= ' AND scope_project_id = :scope_project_id';
+                $params['scope_project_id'] = $scopeProjectId;
+            }
+            $stmt = Database::connection()->prepare($sql . ' ORDER BY name');
+            $stmt->execute($params);
 
             return $stmt->fetchAll();
         }

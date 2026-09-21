@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
+import { CustomerLoginPanel } from '../components/CustomerLoginPanel'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Order, Project, Supplier, User } from '../lib/types'
@@ -108,6 +109,8 @@ export function ProjectDetailPage() {
           {project.customer_name} — <Link to={`/projects/${project.id}/media`} className="text-brand-600 hover:underline">Project media</Link>
         </p>
       )}
+
+      {project && <CustomerLoginPanel projectId={project.id} />}
 
       {canCreateOrder && (
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4">

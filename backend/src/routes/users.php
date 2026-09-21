@@ -25,19 +25,36 @@ $router->get('/api/users', function (Request $request): void {
     // "choose a Sales Manager" when creating a project) — never the full
     // admin listing across every role/status.
     $role = $request->query['role'] ?? null;
-    if ($claims['role'] !== 'company_owner' && $role === null) {
-        Response::error('role is required.', 422);
+    $scopeProjectId = isset($request->query['scope_project_id']) ? (int) $request->query['scope_project_id'] : null;
+
+    if ($claims['role'] !== 'company_owner') {
+        if ($role === null) {
+            Response::error('role is required.', 422);
+        }
+        // A customer lookup is the one case where non-owners need to see a
+        // specific individual rather than a role directory (to find "this
+        // project's customer login") — scope it to one project they're
+        // actually assigned to, never the full customer list across every
+        // project.
+        if ($role === 'customer'
+            && ($scopeProjectId === null || ProjectRepository::findByIdForUser($scopeProjectId, $claims) === null)) {
+            Response::error('scope_project_id is required and must reference a project you are assigned to.', 422);
+        }
     }
     if ($role !== null && !in_array($role, UserRepository::VALID_ROLES, true)) {
         Response::error('Invalid role.', 422);
     }
 
-    Response::json(UserRepository::listAll($role));
+    Response::json(UserRepository::listAll($role, $scopeProjectId));
 });
 
 $router->post('/api/users', function (Request $request): void {
-    Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner']);
+    $claims = Authenticator::requireAuth($request);
+    // Full account administration (any role) stays Owner-only. Sales
+    // Manager/PC get one narrow exception below: a Customer login for a
+    // project they're actually assigned to, since they're the ones who
+    // need the customer logged in (e.g. for SAT approval).
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
 
     $body = $request->body;
     foreach (['name', 'email', 'role'] as $field) {
@@ -51,6 +68,9 @@ $router->post('/api/users', function (Request $request): void {
 
     if (!in_array($role, UserRepository::VALID_ROLES, true)) {
         Response::error('Invalid role.', 422);
+    }
+    if ($claims['role'] !== 'company_owner' && $role !== 'customer') {
+        Response::error('Sales Manager and Project Coordinator can only create a Customer login.', 403);
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         Response::error('Invalid email address.', 422);
@@ -75,6 +95,9 @@ $router->post('/api/users', function (Request $request): void {
         $projectId = isset($body['scope_project_id']) ? (int) $body['scope_project_id'] : null;
         if ($projectId === null || !ProjectRepository::exists($projectId)) {
             Response::error('scope_project_id must reference an existing project for a customer login.', 422);
+        }
+        if ($claims['role'] !== 'company_owner' && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+            Response::error('You can only create a customer login for a project you are assigned to.', 403);
         }
     }
 
@@ -123,12 +146,23 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
 });
 
 $router->post('/api/users/{id}/reset-password', function (Request $request, array $params): void {
-    Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner']);
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
 
     $id = (int) $params['id'];
-    if (UserRepository::findById($id) === null) {
+    $target = UserRepository::findById($id);
+    if ($target === null) {
         Response::error('User not found.', 404);
+    }
+
+    if ($claims['role'] !== 'company_owner') {
+        // Same narrow exception as account creation — only that project's
+        // own Customer login, only for someone assigned to it.
+        if ($target['role'] !== 'customer'
+            || $target['scope_project_id'] === null
+            || ProjectRepository::findByIdForUser((int) $target['scope_project_id'], $claims) === null) {
+            Response::error('You can only reset the password for a customer login on a project you are assigned to.', 403);
+        }
     }
 
     $temporaryPassword = UserRepository::generateTemporaryPassword();

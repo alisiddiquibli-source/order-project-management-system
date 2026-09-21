@@ -801,3 +801,75 @@ changed since they're outside what was reported broken:
   remembering for future specs in this suite.
 
 Full suite now 23/23.
+
+## Round 3 — Live production feedback: dates, customer logins, and a flowchart-visibility report
+
+Live testing on `m.businesslinks-pk.com` surfaced three more gaps, plus a
+report that the new Pipeline Flowchart wasn't visible on a live order page.
+
+- **Stage planned dates had no UI at all, for any role**: the backend has
+  accepted `planned_start`/`planned_end` on `PATCH
+  /orders/{id}/stages/{stageId}` since Phase 1 (with a required reason,
+  and — once a customer-informed date is being changed — a Sales
+  Manager/Owner approver, per `OrderStageRepository::updatePlannedDates`),
+  but no frontend form ever exposed it. Separately, that same endpoint
+  was gated `project_coordinator`-only, which silently contradicted the
+  agreed rule ("sales manager and PC can modify the dates"). Fixed both:
+  widened the role gate to `[project_coordinator, sales_manager]`, added
+  a check that a Sales Manager touching `status`/`notes` on that same
+  endpoint gets a 403 (`"Only the Project Coordinator can change a
+  stage's status or notes."`) since the PC stays the sole stage-status
+  writer, and added `StageDatesForm` (mirrors `OrderEditForm`'s existing
+  `TargetHandoverDateForm` pattern: date inputs + required reason +
+  optional approver dropdown) to each stage's expanded view for PC and
+  Sales Manager.
+- **Only the Owner could create or reset a project's Customer login**,
+  from a separate global admin page (`UserManagementPage`, `/users`)
+  that Sales Manager/PC can't even see in the nav — despite PC being the
+  one who actually needs the customer logged in, e.g. for SAT approval.
+  `POST /api/users`, `POST /api/users/{id}/reset-password` were
+  Owner-only; widened both to also accept Sales Manager/PC **for a
+  Customer login on a project they're actually assigned to** — checked
+  via `ProjectRepository::findByIdForUser` (the same visibility scope
+  already used for reads), never any other role and never another
+  project's customer. `GET /api/users` also had to be widened carefully:
+  a non-owner now may request `role=customer` too, but only paired with
+  `scope_project_id` for a project visible to them (`UserRepository::
+  listAll` gained a `$scopeProjectId` filter) — otherwise a Sales Manager
+  could have listed every customer login across every project in the
+  company, which nothing asked for and would leak cross-project customer
+  identity. New `CustomerLoginPanel` component on `ProjectDetailPage`
+  (visible to Owner/Sales Manager/PC) shows the project's customer login
+  if one exists (with a Reset password button) or a small create form if
+  not — directly on the project they're already looking at, rather than
+  a disconnected admin page. `UserManagementPage`/`/users` itself is
+  intentionally left Owner-only and unchanged — it's full account
+  administration (role changes, deactivation, the entire user directory),
+  a materially bigger surface than "manage this one project's customer."
+- **Pipeline Flowchart reported "not visible" on a live order page**:
+  code review found nothing wrong — `OrderDetailPage.tsx` renders
+  `{order && stages && <PipelineFlowchart .../>}` unconditionally, right
+  after the Status/Field grid and before "Edit order details", and the
+  full suite (including a dedicated full-lifecycle run) exercises it
+  passing 25/25 locally. The screenshot supplied only showed the page
+  from "Edit order details" downward — no header, no Status grid either
+  — which is fully explained by scroll position, but a stale cached
+  `index.html` from before the previous deploy (Bluehost has no
+  cache-busting on that file; only the hashed JS/CSS filenames change
+  per build) is at least as likely given the machine otherwise behaved
+  like the new build (order creation worked for the Sales Manager, which
+  is this same deploy's backend change). Not a code fix — cannot be
+  reproduced without live access. Verification steps for the next
+  deploy: hard-refresh (Ctrl+Shift+R) the order page first; if still
+  missing, View Source on the live page and confirm the `<script src>`
+  hash matches the JS file actually in the deployed `dist/assets/`
+  folder — a mismatch there means the deploy didn't fully take (stale
+  `index.html`, or the zip extracted into a subfolder instead of the
+  document root).
+
+Full suite now 25/25 (new: `e2e/stage-dates-and-customer-login.spec.ts`,
+two tests covering Sales-Manager-vs-PC stage-date/status authority and
+Sales-Manager/PC customer-login create+reset, run against the same
+shared `PRJ-0001` fixture other specs already use — written to tolerate
+either "no customer yet" or "one already exists" on that project,
+since spec execution order isn't something to assume).

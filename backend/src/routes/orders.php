@@ -187,7 +187,10 @@ $router->get('/api/orders/{id}/stages/{stageId}/completion-status', function (Re
 
 $router->patch('/api/orders/{id}/stages/{stageId}', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['project_coordinator']);
+    // Sales Manager and PC can move planned dates (§ business rule); marking
+    // a stage's status or editing its notes stays Project-Coordinator-only —
+    // the PC is the sole stage-status writer.
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager']);
 
     $orderId = (int) $params['id'];
     $stageId = (int) $params['stageId'];
@@ -195,6 +198,10 @@ $router->patch('/api/orders/{id}/stages/{stageId}', function (Request $request, 
 
     $body = $request->body;
     $result = ['ok' => true, 'stage' => $stage];
+
+    if ($claims['role'] === 'sales_manager' && (isset($body['status']) || isset($body['notes']))) {
+        Response::error("Only the Project Coordinator can change a stage's status or notes.", 403);
+    }
 
     if (isset($body['planned_start']) || isset($body['planned_end'])) {
         $reason = (string) ($body['reason'] ?? '');

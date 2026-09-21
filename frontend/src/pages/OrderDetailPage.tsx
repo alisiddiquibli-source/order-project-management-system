@@ -11,7 +11,7 @@ import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import type { AiReport, Order, OrderStage } from '../lib/types'
+import type { AiReport, Order, OrderStage, User } from '../lib/types'
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -39,6 +39,10 @@ export function OrderDetailPage() {
   }, [id])
 
   const canEditStages = user?.role === 'project_coordinator'
+  // Sales Manager and PC can move a stage's planned dates (business rule);
+  // marking a stage's status or notes stays PC-only, the sole stage-status
+  // writer — enforced the same way on the backend (orders.php).
+  const canEditDates = user && ['project_coordinator', 'sales_manager'].includes(user.role)
   const canGenerateRiskAdvisory = user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role)
   // Internal staffing info (who's assigned) — not shown to Customer/Supplier
   // logins. Nothing asked for this to be external-facing, and it's BLI's
@@ -104,6 +108,12 @@ export function OrderDetailPage() {
                   </div>
                   {stage.notes && <p className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">{stage.notes}</p>}
 
+                  {canEditDates && order?.status === 'active' && (
+                    <div className="mb-3">
+                      <StageDatesForm stage={stage} onUpdated={reload} />
+                    </div>
+                  )}
+
                   {canEditStages && order?.status === 'active' && (
                     <StageUpdateForm stage={stage} onUpdated={reload} />
                   )}
@@ -154,6 +164,107 @@ function Field({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
       <p className="text-sm text-slate-800">{value}</p>
+    </div>
+  )
+}
+
+/**
+ * Backend has always accepted planned_start/planned_end on this endpoint
+ * (with a reason, and — once a customer-informed date is being changed —
+ * a Sales Manager/Owner approver, per OrderStageRepository::updatePlannedDates),
+ * but no UI ever exposed it: there was simply no way, for any role, to
+ * set a stage's planned dates short of a direct database edit. Mirrors
+ * OrderEditForm's TargetHandoverDateForm pattern.
+ */
+function StageDatesForm({ stage, onUpdated }: { stage: OrderStage; onUpdated: () => Promise<void> }) {
+  const [approvers, setApprovers] = useState<User[] | null>(null)
+  const [plannedStart, setPlannedStart] = useState('')
+  const [plannedEnd, setPlannedEnd] = useState('')
+  const [reason, setReason] = useState('')
+  const [approvedBy, setApprovedBy] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
+
+  useEffect(() => {
+    Promise.all([api.get<User[]>('/users?role=sales_manager'), api.get<User[]>('/users?role=company_owner')])
+      .then(([salesManagers, owners]) => setApprovers([...salesManagers, ...owners]))
+      .catch(() => {})
+  }, [])
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    setFeedback(null)
+    try {
+      if (!plannedStart && !plannedEnd) {
+        setFeedback({ type: 'error', text: 'Set a planned start and/or end date before saving.' })
+        return
+      }
+      const body: Record<string, string | number> = { reason }
+      if (plannedStart) body.planned_start = plannedStart
+      if (plannedEnd) body.planned_end = plannedEnd
+      if (approvedBy) body.approved_by = Number(approvedBy)
+
+      await api.patch(`/orders/${stage.order_id}/stages/${stage.stage_id}`, body)
+      setFeedback({ type: 'success', text: 'Planned dates saved.' })
+      setPlannedStart('')
+      setPlannedEnd('')
+      setReason('')
+      setApprovedBy('')
+      await onUpdated()
+    } catch (err) {
+      // Business-rule rejections are shown verbatim, e.g. "already
+      // communicated to the customer — needs a Sales Manager/Owner approver."
+      setFeedback({ type: 'error', text: err instanceof ApiError ? err.message : 'Something went wrong.' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg bg-slate-50 p-3">
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Change planned dates</h4>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="date"
+          title="Planned start"
+          value={plannedStart}
+          onChange={(e) => setPlannedStart(e.target.value)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+        <input
+          type="date"
+          title="Planned end"
+          value={plannedEnd}
+          onChange={(e) => setPlannedEnd(e.target.value)}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+        <input
+          type="text"
+          placeholder="Reason (required)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+        <select value={approvedBy} onChange={(e) => setApprovedBy(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+          <option value="">Approved by… (if already told to the customer)</option>
+          {approvers?.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} ({u.email})
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={submitting || !reason || (!plannedStart && !plannedEnd)}
+          className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+        >
+          Save
+        </button>
+      </div>
+      {feedback && (
+        <p className={`mt-2 text-sm ${feedback.type === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>{feedback.text}</p>
+      )}
     </div>
   )
 }
