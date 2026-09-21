@@ -138,6 +138,24 @@ export interface AmcVisit {
   machine_name?: string
 }
 
+export interface UrsExemption {
+  id: number
+  order_id: number
+  reason: string
+  approved_by: number
+  approved_at: string
+}
+
+export interface TrainingAttendee {
+  id: number
+  training_record_id: number
+  name: string
+  department: string | null
+  designation: string | null
+  phone: string | null
+  email: string | null
+}
+
 export interface Requirement {
   id: number
   order_id: number

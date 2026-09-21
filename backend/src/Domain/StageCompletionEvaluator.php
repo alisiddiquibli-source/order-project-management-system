@@ -121,18 +121,8 @@ final class StageCompletionEvaluator
         $db = Database::connection();
 
         return match ($stageId) {
-            1 => self::check(
-                $db,
-                'SELECT 1 FROM requirements WHERE order_id = :order_id AND approved_at IS NOT NULL',
-                ['order_id' => $orderId],
-                'Add a requirement below, then ask a Sales Manager or the Owner to approve it, before this stage can be marked complete.'
-            ),
-            2 => self::check(
-                $db,
-                "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'PO'",
-                ['order_id' => $orderId],
-                "Upload the Purchase Order in the Documents section below (set its type to \"PO\") before this stage can be marked complete."
-            ),
+            1 => self::checkRequirementsAndUrs($db, $orderId),
+            2 => self::checkOrderPlacementDocuments($db, $orderId),
             3 => self::checkManufacturingMilestones($db, $orderStageId),
             4 => self::check(
                 $db,
@@ -140,14 +130,9 @@ final class StageCompletionEvaluator
                 ['id' => $orderStageId],
                 'Add a note confirming testing material coordination (using the note field when updating this stage) before it can be marked complete.'
             ),
-            5 => self::checkFatOrSat($db, $orderStageId, 'FAT', requireCustomerAcceptance: false),
-            6 => self::check(
-                $db,
-                'SELECT 1 FROM shipments WHERE order_id = :order_id AND actual_dispatch_date IS NOT NULL',
-                ['order_id' => $orderId],
-                'Record the shipment\'s actual dispatch date in the Shipment section — a booking alone is not enough to mark this stage complete.'
-            ),
-            7 => self::checkImportTracking($db, $orderStageId, 'cleared'),
+            5 => self::checkFatReadiness($db, $orderId, $orderStageId),
+            6 => self::checkShipment($db, $orderId),
+            7 => self::checkImportClearance($db, $orderStageId),
             8 => self::checkDelivery($db, $orderId, $orderStageId),
             9 => self::checkEngineerReport($db, $orderStageId, 'installation'),
             10 => self::checkFatOrSat($db, $orderStageId, 'SAT', requireCustomerAcceptance: true),
@@ -155,6 +140,140 @@ final class StageCompletionEvaluator
             12 => self::checkHandover($db, $orderId, $orderStageId),
             default => ['ok' => true, 'reason' => null],
         };
+    }
+
+    /**
+     * Requirements captured (existing) plus a URS (User Requirement
+     * Specification) document on file — or an Owner-approved exemption
+     * when the customer genuinely has none to give.
+     *
+     * @return array{ok: bool, reason: ?string}
+     */
+    private static function checkRequirementsAndUrs(PDO $db, int $orderId): array
+    {
+        $requirementCheck = self::check(
+            $db,
+            'SELECT 1 FROM requirements WHERE order_id = :order_id AND approved_at IS NOT NULL',
+            ['order_id' => $orderId],
+            'Add a requirement below, then ask a Sales Manager or the Owner to approve it, before this stage can be marked complete.'
+        );
+        if (!$requirementCheck['ok']) {
+            return $requirementCheck;
+        }
+
+        $hasUrs = self::check(
+            $db,
+            "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'URS'",
+            ['order_id' => $orderId],
+            ''
+        );
+        if ($hasUrs['ok']) {
+            return ['ok' => true, 'reason' => null];
+        }
+
+        $hasExemption = self::check(
+            $db,
+            'SELECT 1 FROM urs_exemptions WHERE order_id = :order_id',
+            ['order_id' => $orderId],
+            ''
+        );
+        if ($hasExemption['ok']) {
+            return ['ok' => true, 'reason' => null];
+        }
+
+        return [
+            'ok' => false,
+            'reason' => 'Upload the URS (User Requirement Specification) document in the Documents section below '
+                . '(set its type to "URS") — or ask the Owner to approve an exemption if the customer has none to '
+                . 'give — before this stage can be marked complete.',
+        ];
+    }
+
+    /**
+     * @return array{ok: bool, reason: ?string}
+     */
+    private static function checkOrderPlacementDocuments(PDO $db, int $orderId): array
+    {
+        $poCheck = self::check(
+            $db,
+            "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'PO'",
+            ['order_id' => $orderId],
+            'Upload the Purchase Order in the Documents section below (set its type to "PO") before this stage can be marked complete.'
+        );
+        if (!$poCheck['ok']) {
+            return $poCheck;
+        }
+
+        return self::check(
+            $db,
+            "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'LC'",
+            ['order_id' => $orderId],
+            'Upload the LC (Letter of Credit) in the Documents section below (set its type to "LC") before this stage can be marked complete.'
+        );
+    }
+
+    /**
+     * @return array{ok: bool, reason: ?string}
+     */
+    private static function checkFatReadiness(PDO $db, int $orderId, int $orderStageId): array
+    {
+        foreach (['IQ', 'OQ', 'DQ'] as $type) {
+            $check = self::check(
+                $db,
+                'SELECT 1 FROM documents WHERE order_id = :order_id AND type = :type',
+                ['order_id' => $orderId, 'type' => $type],
+                "Upload the {$type} document received from the Supplier (set its type to \"{$type}\") before this stage can be marked complete."
+            );
+            if (!$check['ok']) {
+                return $check;
+            }
+        }
+
+        return self::checkFatOrSat($db, $orderStageId, 'FAT', requireCustomerAcceptance: false);
+    }
+
+    /**
+     * @return array{ok: bool, reason: ?string}
+     */
+    private static function checkShipment(PDO $db, int $orderId): array
+    {
+        $dispatchCheck = self::check(
+            $db,
+            'SELECT 1 FROM shipments WHERE order_id = :order_id AND actual_dispatch_date IS NOT NULL',
+            ['order_id' => $orderId],
+            'Record the shipment\'s actual dispatch date in the Shipment section — a booking alone is not enough to mark this stage complete.'
+        );
+        if (!$dispatchCheck['ok']) {
+            return $dispatchCheck;
+        }
+
+        return self::check(
+            $db,
+            "SELECT 1 FROM documents WHERE order_id = :order_id AND type = 'shipping_document'",
+            ['order_id' => $orderId],
+            'Upload the shipping documents (e.g. Bill of Lading) in the Documents section below (set its type to "shipping_document") before this stage can be marked complete.'
+        );
+    }
+
+    /**
+     * @return array{ok: bool, reason: ?string}
+     */
+    private static function checkImportClearance(PDO $db, int $orderStageId): array
+    {
+        $clearedCheck = self::checkImportTracking($db, $orderStageId, 'cleared');
+        if (!$clearedCheck['ok']) {
+            return $clearedCheck;
+        }
+
+        return self::check(
+            $db,
+            "SELECT 1 FROM customer_import_tracking
+             WHERE order_stage_id = :id
+               AND customer_contact_email IS NOT NULL AND customer_contact_email <> ''
+               AND customer_contact_phone IS NOT NULL AND customer_contact_phone <> ''",
+            ['id' => $orderStageId],
+            "Add the customer's import coordinator's cell phone and email in the Customer import tracking section before this stage can be marked complete."
+        );
     }
 
     /**
@@ -327,6 +446,16 @@ final class StageCompletionEvaluator
 
         if ($record === false) {
             return ['ok' => false, 'reason' => 'Record the training session and its attendees before this stage can be marked complete.'];
+        }
+
+        $stmt = $db->prepare('SELECT 1 FROM training_attendees WHERE training_record_id = :id LIMIT 1');
+        $stmt->execute(['id' => $record['id']]);
+        if ($stmt->fetch() === false) {
+            return [
+                'ok' => false,
+                'reason' => 'Add at least one customer staff attendee (with department, designation, and contact '
+                    . 'details) to the training record before this stage can be marked complete.',
+            ];
         }
 
         $stmt = $db->prepare(

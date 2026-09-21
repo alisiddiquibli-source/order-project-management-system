@@ -158,6 +158,20 @@ CREATE TABLE requirements (
     INDEX idx_requirements_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Stage 1 normally requires a URS (User Requirement Specification) document
+-- on file (StageCompletionEvaluator) — this is the sole escape hatch, one
+-- per order, and only the Company Owner (never Sales Manager/PC) can grant
+-- it, unlike stage_exceptions below which Sales Manager can also approve.
+CREATE TABLE urs_exemptions (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id        INT UNSIGNED NOT NULL UNIQUE,
+    reason          TEXT NOT NULL,
+    approved_by     INT UNSIGNED NOT NULL,
+    approved_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_urs_exemption_order FOREIGN KEY (order_id) REFERENCES orders(id),
+    CONSTRAINT fk_urs_exemption_approved_by FOREIGN KEY (approved_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Master lookup: the fixed 12 stages, seeded below.
 CREATE TABLE stages (
     id          TINYINT UNSIGNED PRIMARY KEY,
@@ -375,6 +389,22 @@ CREATE TABLE training_records (
     CONSTRAINT fk_tr_order_stage FOREIGN KEY (order_stage_id) REFERENCES order_stages(id),
     CONSTRAINT fk_tr_report_document FOREIGN KEY (report_document_id) REFERENCES documents(id),
     INDEX idx_tr_order_stage (order_stage_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Structured per-person detail, alongside training_records.attendees (kept
+-- as a freeform summary) — the customer's own staff who need to be
+-- reachable after handover, not just a name in a paragraph.
+CREATE TABLE training_attendees (
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    training_record_id INT UNSIGNED NOT NULL,
+    name                VARCHAR(255) NOT NULL,
+    department          VARCHAR(255) NULL,
+    designation         VARCHAR(255) NULL,
+    phone               VARCHAR(50) NULL,
+    email               VARCHAR(255) NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ta_training_record FOREIGN KEY (training_record_id) REFERENCES training_records(id),
+    INDEX idx_ta_training_record (training_record_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Append-only: a deliberate, auditable sign-off, tied to the exact record it covers.

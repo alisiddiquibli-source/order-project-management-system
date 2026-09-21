@@ -17,10 +17,13 @@ export function ImportTrackingSection({ orderId, stageId }: { orderId: number; s
   const { user } = useAuth()
   const [tracking, setTracking] = useState<CustomerImportTracking | null | undefined>(undefined)
   const [contactName, setContactName] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
   const [status, setStatus] = useState('')
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [contactSaved, setContactSaved] = useState(false)
 
   const canEdit = user?.role === 'project_coordinator'
   const requiredStatus = REQUIRED_STATUS[stageId]
@@ -34,19 +37,55 @@ export function ImportTrackingSection({ orderId, stageId }: { orderId: number; s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId, stageId])
 
+  // Pre-fills the contact-detail edit fields once a record exists — keyed
+  // on id specifically so it doesn't clobber an in-progress edit on a
+  // status-only reload.
+  useEffect(() => {
+    if (tracking) {
+      setContactName(tracking.customer_contact_name ?? '')
+      setContactEmail(tracking.customer_contact_email ?? '')
+      setContactPhone(tracking.customer_contact_phone ?? '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracking?.id])
+
   async function handleCreate() {
     setSubmitting(true)
     setError(null)
     try {
       await api.post(`/orders/${orderId}/stages/${stageId}/import-tracking`, {
         customer_contact_name: contactName || undefined,
+        customer_contact_email: contactEmail || undefined,
+        customer_contact_phone: contactPhone || undefined,
         latest_status: status || undefined,
       })
       setContactName('')
+      setContactEmail('')
+      setContactPhone('')
       setStatus('')
       await reload()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the tracking record.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleSaveContact() {
+    if (!tracking) return
+    setSubmitting(true)
+    setError(null)
+    setContactSaved(false)
+    try {
+      await api.patch(`/import-tracking/${tracking.id}`, {
+        customer_contact_name: contactName || undefined,
+        customer_contact_email: contactEmail || undefined,
+        customer_contact_phone: contactPhone || undefined,
+      })
+      setContactSaved(true)
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the contact details.')
     } finally {
       setSubmitting(false)
     }
@@ -83,8 +122,15 @@ export function ImportTrackingSection({ orderId, stageId }: { orderId: number; s
           <div className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-sm">
             <p className="font-medium text-slate-900">Latest status: {tracking.latest_status ?? '—'}</p>
             {tracking.customer_contact_name && <p className="text-slate-600">Contact: {tracking.customer_contact_name}</p>}
+            {tracking.customer_contact_email && <p className="text-slate-600">Email: {tracking.customer_contact_email}</p>}
+            {tracking.customer_contact_phone && <p className="text-slate-600">Cell: {tracking.customer_contact_phone}</p>}
             {requiredStatus && tracking.latest_status !== requiredStatus && (
               <p className="mt-1 text-xs text-amber-700">Stage completes once this reaches &quot;{requiredStatus}&quot;.</p>
+            )}
+            {stageId === 7 && (!tracking.customer_contact_email || !tracking.customer_contact_phone) && (
+              <p className="mt-1 text-xs text-amber-700">
+                The coordinator&apos;s cell phone and email are both required before this stage can be marked complete.
+              </p>
             )}
           </div>
           {tracking.history && tracking.history.length > 0 && (
@@ -97,6 +143,40 @@ export function ImportTrackingSection({ orderId, stageId }: { orderId: number; s
               ))}
             </div>
           )}
+          {canEdit && (
+            <div className="mb-3 flex flex-col gap-2 rounded-md bg-slate-50 p-3 sm:flex-row">
+              <input
+                type="text"
+                placeholder="Coordinator name"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:w-40"
+              />
+              <input
+                type="email"
+                placeholder="Coordinator email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Coordinator cell phone"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:w-40"
+              />
+              <button
+                type="button"
+                onClick={handleSaveContact}
+                disabled={submitting}
+                className="rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                Save contact
+              </button>
+            </div>
+          )}
+          {contactSaved && <p className="mb-3 text-sm text-emerald-600">Contact details saved.</p>}
           {canEdit && (
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -135,6 +215,20 @@ export function ImportTrackingSection({ orderId, stageId }: { orderId: number; s
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
                 className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="email"
+                placeholder="Contact email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Contact cell phone"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm sm:w-40"
               />
               <input
                 type="text"

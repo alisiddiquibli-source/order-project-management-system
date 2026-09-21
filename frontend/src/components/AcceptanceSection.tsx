@@ -53,16 +53,19 @@ export function AcceptanceSection({
     setAcceptances(accs.filter((a) => a.type === type))
     setDocuments(docs.filter((d) => d.order_stage_id === orderStageId))
 
+    // These endpoints all return newest-first (`ORDER BY id DESC`) — index
+    // 0 is the latest record, not the last array element (see the same
+    // fix in the `latest` acceptance display above).
     let target: number | null = null
     if (targetTable === 'fat_sat_record') {
       const records = await api.get<FatSatRecord[]>(`/orders/${orderId}/stages/${stageId}/fat-sat`)
       target = records.find((r) => r.superseded_by === null)?.id ?? null
     } else if (targetTable === 'training_record') {
       const records = await api.get<TrainingRecord[]>(`/orders/${orderId}/stages/${stageId}/training`)
-      target = records[records.length - 1]?.id ?? null
+      target = records[0]?.id ?? null
     } else {
       const reports = await api.get<EngineerReport[]>(`/orders/${orderId}/stages/${stageId}/engineer-reports`)
-      target = reports.filter((r) => r.type === 'handover_readiness').slice(-1)[0]?.id ?? null
+      target = reports.find((r) => r.type === 'handover_readiness')?.id ?? null
     }
     setTargetRecordId(target)
   }

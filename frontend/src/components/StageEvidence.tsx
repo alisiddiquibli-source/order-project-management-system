@@ -8,6 +8,7 @@ import { MilestonesSection } from './MilestonesSection'
 import { RequirementsSection } from './RequirementsSection'
 import { ShipmentSection } from './ShipmentSection'
 import { TrainingSection } from './TrainingSection'
+import { UrsExemptionPanel } from './UrsExemptionPanel'
 import type { OrderStage } from '../lib/types'
 
 /**
@@ -28,9 +29,26 @@ export function StageEvidence({ orderId, stage }: { orderId: number; stage: Orde
 
   switch (stageId) {
     case 1:
-      return <RequirementsSection orderId={orderId} />
+      return (
+        <div className="space-y-3">
+          <RequirementsSection orderId={orderId} />
+          <DocumentsSection
+            orderId={orderId}
+            orderStageId={orderStageId}
+            suggestedType="URS"
+            title="Documents (URS required — also add drawings/layouts here)"
+            onUploaded={() => setDocumentsRefreshKey((k) => k + 1)}
+          />
+          <UrsExemptionPanel orderId={orderId} orderStageId={orderStageId} refreshKey={documentsRefreshKey} />
+        </div>
+      )
     case 2:
-      return <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="PO" title="Documents (a PO is required)" />
+      return (
+        <div className="space-y-3">
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="PO" title="Documents (a PO is required)" />
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="LC" title="Documents (an LC is required)" />
+        </div>
+      )
     case 3:
       return <MilestonesSection orderId={orderId} orderStageId={orderStageId} />
     case 5:
@@ -44,11 +62,24 @@ export function StageEvidence({ orderId, stage }: { orderId: number; stage: Orde
             title="FAT report & photos"
             onUploaded={() => setDocumentsRefreshKey((k) => k + 1)}
           />
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="IQ" title="IQ document (from Supplier)" />
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="OQ" title="OQ document (from Supplier)" />
+          <DocumentsSection orderId={orderId} orderStageId={orderStageId} suggestedType="DQ" title="DQ document (from Supplier)" />
           <AcceptanceSection orderId={orderId} orderStageId={orderStageId} stageId={stageId} type="fat_conditional" targetTable="fat_sat_record" />
         </div>
       )
     case 6:
-      return <ShipmentSection orderId={orderId} />
+      return (
+        <div className="space-y-3">
+          <ShipmentSection orderId={orderId} />
+          <DocumentsSection
+            orderId={orderId}
+            orderStageId={orderStageId}
+            suggestedType="shipping_document"
+            title="Shipping documents (e.g. Bill of Lading)"
+          />
+        </div>
+      )
     case 7:
       return <ImportTrackingSection orderId={orderId} stageId={stageId} />
     case 8:

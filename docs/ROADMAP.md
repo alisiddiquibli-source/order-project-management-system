@@ -911,3 +911,111 @@ Sales-Manager-then-customer order production hit, to tell them apart.
 
 Full suite still 25/25 with this change folded into the existing
 full-lifecycle test (no new spec file needed).
+
+## Round 5 — Stage-specific document/data requirements dictated live
+
+New business rules, dictated directly rather than derived from a bug
+report: specific documents and contact/attendee data now required at five
+stages, one of them (URS) with an explicit owner-only escape hatch.
+
+**Proactive fix first**: found while reading `AcceptanceSection.tsx` for
+an unrelated reason — the exact same "last array element instead of
+newest" mistake fixed there last round was still present in three more
+places, all reading these same newest-first (`ORDER BY id DESC`)
+endpoints: `AcceptanceSection`'s own target-record lookup (2 more
+instances — training record and handover-readiness report), plus
+`TrainingSection` and `EngineerReportSection`'s "latest" displays. None
+had been reported broken yet only because, same as the acceptance banner,
+no stage in any prior test or (probably) production use had gone through
+a resubmission — a training re-do, a corrected engineer report. Fixed all
+four to index `[0]`/`.find()` instead of `.length - 1`/`.slice(-1)`.
+
+**Stage 1 (Requirements captured) — URS presence + Owner-only exemption.**
+A URS (User Requirement Specification) document is now required on the
+order (new `DocumentsSection` instance, type `URS`; drawings/layouts also
+go in the same box) before this stage can complete — in addition to the
+existing approved-requirement check. The one way around it: a new
+`urs_exemptions` table (order_id UNIQUE, reason, approved_by, approved_at)
+and `POST/GET /api/orders/{id}/urs-exemption`, deliberately gated to
+`company_owner` only — not Sales Manager/Owner like `stage_exceptions`
+elsewhere in this system, because this was dictated as Owner-specific.
+New `UrsExemptionPanel` component shows the status and, for the Owner,
+the approval form when no URS/exemption exists yet.
+
+**Stage 2 (Order placed) — LC alongside the PO.** A second
+`DocumentsSection` (type `LC`) sits next to the existing PO one;
+`StageCompletionEvaluator` now requires both document types, not just PO.
+
+**Stage 5 (Machine FAT readiness) — IQ/OQ/DQ from the Supplier.** Three
+more `DocumentsSection` instances (types `IQ`, `OQ`, `DQ`) alongside the
+existing FAT evidence; all three now required (plus the existing FAT
+pass/acceptance requirement) before this stage completes.
+
+**Stage 6 (Shipment coordination) — shipping document copies.** One more
+`DocumentsSection` (type `shipping_document`, e.g. a Bill of Lading);
+required alongside the existing actual-dispatch-date check.
+
+**Stage 7 (Import clearance) — coordinator cell phone + email on record.**
+The schema and `PATCH /api/import-tracking/{id}` already fully supported
+`customer_contact_email`/`customer_contact_phone` — nothing here had ever
+put an input field in front of a user. Added email/phone inputs to both
+the initial "Start tracking" form and a new always-visible "Save contact"
+row for backfilling them onto an existing record, plus a
+`StageCompletionEvaluator` check requiring both non-empty before stage 7
+can complete (stage 8's own tracking record is unaffected — this is
+stage-7-specific, matching where the business rule was stated).
+
+**Stage 11 (Training) — structured customer staff attendee detail.** The
+existing `attendees` field is a single freeform paragraph; added a real
+`training_attendees` table (name required; department, designation,
+phone, email optional but all presented up front) via
+`POST/GET /api/training-records/{id}/attendees`, and a matching list +
+add-attendee form in `TrainingSection`. `StageCompletionEvaluator` now
+also requires at least one attendee row (on top of the existing
+attendees-text and customer-acknowledgement checks) before stage 11 can
+complete.
+
+**Schema migration needed on the live database** (not yet applied — give
+this to Chrome alongside the code deploy; both are pure additions, safe
+to run without touching existing data):
+```sql
+CREATE TABLE urs_exemptions (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id        INT UNSIGNED NOT NULL UNIQUE,
+    reason          TEXT NOT NULL,
+    approved_by     INT UNSIGNED NOT NULL,
+    approved_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_urs_exemption_order FOREIGN KEY (order_id) REFERENCES orders(id),
+    CONSTRAINT fk_urs_exemption_approved_by FOREIGN KEY (approved_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE training_attendees (
+    id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    training_record_id INT UNSIGNED NOT NULL,
+    name                VARCHAR(255) NOT NULL,
+    department          VARCHAR(255) NULL,
+    designation         VARCHAR(255) NULL,
+    phone               VARCHAR(50) NULL,
+    email               VARCHAR(255) NULL,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ta_training_record FOREIGN KEY (training_record_id) REFERENCES training_records(id),
+    INDEX idx_ta_training_record (training_record_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+**Important operational note, worth flagging plainly**: these are all
+*hard* new requirements — any order currently sitting past stage 1/2/5/6/7
+on production, once this deploys, will need the relevant documents/data
+backfilled before it can advance further (e.g. an order already at stage
+8 doesn't need a URS/PO/LC retroactively for stages already completed —
+`StageCompletionEvaluator` only runs when a stage is *marked* complete,
+never retroactively un-completes anything — but an order still sitting
+*at* stage 2 today will need an LC uploaded, not just a PO, before it can
+move to stage 3 after this deploys). Not a bug, just a real consequence
+of tightening the gate — worth knowing about before rollout, not
+discovering it mid-pipeline on a live deal.
+
+Verified live locally: full suite 25/25, including `full-lifecycle.spec.ts`
+extended to satisfy every new requirement (URS, LC, IQ/OQ/DQ, shipping
+document, coordinator contact, training attendee) at the stage it now
+gates, end to end, creation to handover.

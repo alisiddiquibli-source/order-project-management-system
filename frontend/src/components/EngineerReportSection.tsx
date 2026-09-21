@@ -35,7 +35,9 @@ export function EngineerReportSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stageId, type])
 
-  const latest = reports?.[reports.length - 1] ?? null
+  // Backend returns these newest-first (ORDER BY id DESC) — index 0 is
+  // latest, not the last array element (see the same fix in AcceptanceSection).
+  const latest = reports?.[0] ?? null
 
   async function handleSubmit() {
     setSubmitting(true)

@@ -104,10 +104,21 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await login(page, 'pia@businesslinks-pk.com', 'Password123!')
   await page.goto(orderUrl)
   await expandStage(page, 'Requirements captured')
+  // URS document required (or an Owner exemption) before this stage can
+  // complete — production feedback: "special focus on URS, presence, URS
+  // acceptance (must)."
+  const ursFile = '/tmp/e2e-urs.pdf'
+  writeFileSync(ursFile, Buffer.from('fake URS content'))
+  const ursDocs = page.locator('h3', { hasText: 'Documents (URS required' }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await ursDocs.locator('input[type="file"]').setInputFiles(ursFile)
+  await ursDocs.locator('button:has-text("Upload")').click()
+  await expect(ursDocs.getByText('URS', { exact: true })).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('text=URS document on file.')).toBeVisible({ timeout: 10_000 })
   await markStageComplete(page)
   await expect(page.locator('text=Could not').first()).toHaveCount(0)
 
-  // Stage 2: Order placed — upload a PO document.
+  // Stage 2: Order placed — upload a PO document and an LC document
+  // ("LC documents to be uploaded along with Purchase order").
   await page.goto(orderUrl)
   await expandStage(page, 'Order placed')
   const poFile = '/tmp/e2e-po.pdf'
@@ -116,6 +127,13 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await stage2Docs.locator('input[type="file"]').setInputFiles(poFile)
   await stage2Docs.locator('button:has-text("Upload")').click()
   await expect(stage2Docs.getByText('PO', { exact: true })).toBeVisible({ timeout: 10_000 })
+
+  const lcFile = '/tmp/e2e-lc.pdf'
+  writeFileSync(lcFile, Buffer.from('fake LC content'))
+  const lcDocs = page.locator('h3', { hasText: 'Documents (an LC is required)' }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await lcDocs.locator('input[type="file"]').setInputFiles(lcFile)
+  await lcDocs.locator('button:has-text("Upload")').click()
+  await expect(lcDocs.getByText('LC', { exact: true })).toBeVisible({ timeout: 10_000 })
   await markStageComplete(page)
 
   // Stage 3: Machine manufacturing progress — one milestone, marked done.
@@ -133,16 +151,26 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await expandStage(page, 'Machine testing material coordination')
   await markStageComplete(page, 'Test weights and calibration tools confirmed on site')
 
-  // Stage 5: FAT — schedule, record a straight Pass (no acceptance needed for a plain pass).
+  // Stage 5: FAT — schedule, record a straight Pass (no acceptance needed for a plain pass),
+  // plus IQ/OQ/DQ soft copies from the Supplier ("we need IQ, OQ, and DQ documents").
   await page.goto(orderUrl)
   await expandStage(page, 'Machine FAT readiness')
   await page.click('button:has-text("Schedule FAT")')
   await page.locator('select', { hasText: 'Record result' }).selectOption({ label: 'Pass' })
   await page.click('button:has-text("Record result")')
   await expect(page.locator('text=Result: pass')).toBeVisible({ timeout: 10_000 })
+  for (const docType of ['IQ', 'OQ', 'DQ']) {
+    const filePath = `/tmp/e2e-${docType.toLowerCase()}.pdf`
+    writeFileSync(filePath, Buffer.from(`fake ${docType} content`))
+    const docsSection = page.locator('h3', { hasText: `${docType} document (from Supplier)` }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+    await docsSection.locator('input[type="file"]').setInputFiles(filePath)
+    await docsSection.locator('button:has-text("Upload")').click()
+    await expect(docsSection.getByText(docType, { exact: true })).toBeVisible({ timeout: 10_000 })
+  }
   await markStageComplete(page)
 
-  // Stage 6: Shipment — book, then mark dispatched.
+  // Stage 6: Shipment — book, mark dispatched, and attach shipping document
+  // copies ("we need shipping document copies").
   await page.goto(orderUrl)
   await expandStage(page, 'Shipment coordination')
   await page.fill('input[placeholder="Carrier"]', 'Maersk')
@@ -150,14 +178,25 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await expect(page.locator('text=Maersk')).toBeVisible({ timeout: 10_000 })
   await page.click('button:has-text("Mark dispatched today")')
   await expect(page.locator('text=Dispatched')).toBeVisible({ timeout: 10_000 })
+  const shippingFile = '/tmp/e2e-shipping-doc.pdf'
+  writeFileSync(shippingFile, Buffer.from('fake shipping document content'))
+  const shippingDocs = page.locator('h3', { hasText: 'Shipping documents' }).locator('xpath=ancestor::div[contains(@class,"rounded-lg")][1]')
+  await shippingDocs.locator('input[type="file"]').setInputFiles(shippingFile)
+  await shippingDocs.locator('button:has-text("Upload")').click()
+  await expect(shippingDocs.getByText('shipping_document', { exact: true })).toBeVisible({ timeout: 10_000 })
   await markStageComplete(page)
 
-  // Stage 7: Import clearance — start tracking, then update to "cleared".
+  // Stage 7: Import clearance — start tracking with the coordinator's cell
+  // phone and email on record ("Customer Contact Coordinator cell phone
+  // and email"), then update to "cleared".
   await page.goto(orderUrl)
   await expandStage(page, 'Import clearance in Pakistan')
   await page.fill('input[placeholder="Customer contact name"]', 'Textile Mills Logistics')
+  await page.fill('input[placeholder="Contact email"]', 'logistics@textilemills.example')
+  await page.fill('input[placeholder="Contact cell phone"]', '+92-300-1234567')
   await page.click('button:has-text("Start tracking")')
   await expect(page.locator('text=Latest status:')).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('text=Email: logistics@textilemills.example')).toBeVisible()
   await page.fill('input[placeholder*="New status"]', 'cleared')
   await page.click('button:has-text("Update")')
   await expect(page.locator('text=Latest status: cleared')).toBeVisible({ timeout: 10_000 })
@@ -243,6 +282,16 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await page.fill('input[placeholder="Attendees"]', 'Plant supervisor, 2 operators')
   await page.click('button:has-text("Submit training record")')
   await expect(page.locator('text=Attendees: Plant supervisor')).toBeVisible({ timeout: 10_000 })
+  // Structured customer staff detail required before this stage can
+  // complete ("Customer staff details like Department, Designation, and
+  // contact numbers email and cell").
+  await page.fill('input[placeholder="Name"]', 'Zainab Malik')
+  await page.fill('input[placeholder="Department"]', 'Production')
+  await page.fill('input[placeholder="Designation"]', 'Shift Supervisor')
+  await page.fill('input[placeholder="Cell phone"]', '+92-300-7654321')
+  await page.fill('input[placeholder="Email"]', 'zainab.malik@textilemills.example')
+  await page.click('button:has-text("Add")')
+  await expect(page.locator('text=Zainab Malik')).toBeVisible({ timeout: 10_000 })
   await logout(page)
 
   await login(page, 'lifecycle-customer@textilemills.example', customerPassword)

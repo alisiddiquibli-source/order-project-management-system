@@ -14,7 +14,9 @@ use Bli\Models\FatSatRepository;
 use Bli\Models\ManufacturingMilestoneRepository;
 use Bli\Models\ProjectRepository;
 use Bli\Models\RequirementRepository;
+use Bli\Models\TrainingAttendeeRepository;
 use Bli\Models\TrainingRecordRepository;
+use Bli\Models\UrsExemptionRepository;
 
 /** @var \Bli\Http\Router $router */
 
@@ -57,6 +59,35 @@ $router->patch('/api/requirements/{id}/approve', function (Request $request, arr
     OrderAccess::requireVisibleOrder((int) $requirement['order_id'], $claims);
 
     Response::json(RequirementRepository::approve((int) $requirement['id'], (int) $claims['sub']));
+});
+
+// Stage 1 normally requires a URS document on file (StageCompletionEvaluator)
+// — one Owner-only exemption per order, for when a customer genuinely has
+// none to give (§ business rule dictated live, not in the original spec).
+$router->get('/api/orders/{id}/urs-exemption', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $orderId = (int) $params['id'];
+    OrderAccess::requireVisibleOrder($orderId, $claims);
+
+    Response::json(UrsExemptionRepository::findForOrder($orderId));
+});
+
+$router->post('/api/orders/{id}/urs-exemption', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner']);
+
+    $orderId = (int) $params['id'];
+    OrderAccess::requireVisibleOrder($orderId, $claims);
+
+    $reason = (string) ($request->body['reason'] ?? '');
+    if ($reason === '') {
+        Response::error('reason is required.', 422);
+    }
+    if (UrsExemptionRepository::findForOrder($orderId) !== null) {
+        Response::error('A URS exemption already exists for this order.', 422);
+    }
+
+    Response::json(UrsExemptionRepository::create($orderId, $reason, (int) $claims['sub']), 201);
 });
 
 // ---------------------------------------------------------------------
@@ -478,6 +509,48 @@ $router->post('/api/orders/{id}/stages/{stageId}/training', function (Request $r
         $request->body['notes'] ?? null,
     );
     Response::json($record, 201);
+});
+
+// Structured customer-staff detail for a training record — who to actually
+// contact after handover, alongside the freeform attendees summary above.
+$router->get('/api/training-records/{id}/attendees', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    $trainingRecordId = (int) $params['id'];
+
+    $record = TrainingRecordRepository::find($trainingRecordId);
+    if ($record === null) {
+        Response::error('Training record not found.', 404);
+    }
+    OrderAccess::requireVisibleStageByPk((int) $record['order_stage_id'], $claims);
+
+    Response::json(TrainingAttendeeRepository::listForTrainingRecord($trainingRecordId));
+});
+
+$router->post('/api/training-records/{id}/attendees', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['installation_engineer']);
+
+    $trainingRecordId = (int) $params['id'];
+    $record = TrainingRecordRepository::find($trainingRecordId);
+    if ($record === null) {
+        Response::error('Training record not found.', 404);
+    }
+    OrderAccess::requireVisibleStageByPk((int) $record['order_stage_id'], $claims);
+
+    $name = (string) ($request->body['name'] ?? '');
+    if ($name === '') {
+        Response::error('name is required.', 422);
+    }
+
+    $attendee = TrainingAttendeeRepository::create(
+        $trainingRecordId,
+        $name,
+        $request->body['department'] ?? null,
+        $request->body['designation'] ?? null,
+        $request->body['phone'] ?? null,
+        $request->body['email'] ?? null,
+    );
+    Response::json($attendee, 201);
 });
 
 // ---------------------------------------------------------------------
