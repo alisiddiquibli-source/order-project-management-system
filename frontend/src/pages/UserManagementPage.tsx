@@ -96,6 +96,16 @@ export function UserManagementPage() {
     }
   }
 
+  async function handleProjectChange(user: User, newProjectId: string) {
+    setError(null)
+    try {
+      await api.patch(`/users/${user.id}`, { scope_project_id: Number(newProjectId) })
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reassign the project.')
+    }
+  }
+
   async function handleToggleStatus(user: User) {
     setError(null)
     try {
@@ -234,6 +244,7 @@ export function UserManagementPage() {
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Email</th>
               <th className="px-4 py-2">Role</th>
+              <th className="px-4 py-2">Project</th>
               <th className="px-4 py-2">Status</th>
               <th className="px-4 py-2">Actions</th>
             </tr>
@@ -255,6 +266,24 @@ export function UserManagementPage() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="px-4 py-2">
+                  {user.role === 'customer' ? (
+                    <select
+                      value={user.scope_project_id ?? ''}
+                      onChange={(e) => handleProjectChange(user, e.target.value)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    >
+                      <option value="">Which project?</option>
+                      {projects?.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.project_number} · {p.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>

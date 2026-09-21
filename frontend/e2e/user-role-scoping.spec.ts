@@ -19,14 +19,18 @@ test.describe('creating supplier/customer logins requires the right reference', 
     await login(page, 'owen@businesslinks-pk.com', 'Password123!')
     await page.goto('/users')
 
-    await page.fill('input[placeholder="Full name"]', 'Acme Contact')
-    await page.fill('input[placeholder="Email"]', 'contact@acme-machines.example')
-    await page.locator('select').first().selectOption({ label: 'Supplier' })
+    // Scoped to the "Create a login" form specifically — each existing
+    // user row also has its own project-reassignment <select> since the
+    // Manage-users Project column was added.
+    const createForm = page.locator('h2', { hasText: 'Create a login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+    await createForm.locator('input[placeholder="Full name"]').fill('Acme Contact')
+    await createForm.locator('input[placeholder="Email"]').fill('contact@acme-machines.example')
+    await createForm.locator('select').first().selectOption({ label: 'Supplier' })
 
-    const createButton = page.locator('button:has-text("Create")').first()
+    const createButton = createForm.locator('button:has-text("Create")')
     await expect(createButton).toBeDisabled()
 
-    await page.locator('select').filter({ has: page.locator('option', { hasText: 'Acme Machines GmbH' }) }).selectOption({ label: 'Acme Machines GmbH' })
+    await createForm.locator('select').filter({ has: page.locator('option', { hasText: 'Acme Machines GmbH' }) }).selectOption({ label: 'Acme Machines GmbH' })
     await expect(createButton).toBeEnabled()
     await createButton.click()
 
@@ -39,14 +43,15 @@ test.describe('creating supplier/customer logins requires the right reference', 
     await login(page, 'owen@businesslinks-pk.com', 'Password123!')
     await page.goto('/users')
 
-    await page.fill('input[placeholder="Full name"]', 'Textile Mills Contact')
-    await page.fill('input[placeholder="Email"]', 'ops@textilemills.example')
-    await page.locator('select').first().selectOption({ label: 'Customer' })
+    const createForm = page.locator('h2', { hasText: 'Create a login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+    await createForm.locator('input[placeholder="Full name"]').fill('Textile Mills Contact')
+    await createForm.locator('input[placeholder="Email"]').fill('ops@textilemills.example')
+    await createForm.locator('select').first().selectOption({ label: 'Customer' })
 
-    const createButton = page.locator('button:has-text("Create")').first()
+    const createButton = createForm.locator('button:has-text("Create")')
     await expect(createButton).toBeDisabled()
 
-    await page.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
+    await createForm.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
     await expect(createButton).toBeEnabled()
     await createButton.click()
 

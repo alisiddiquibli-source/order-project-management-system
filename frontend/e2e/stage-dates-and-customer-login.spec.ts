@@ -99,3 +99,60 @@ test('Sales Manager and PC can create and manage their project\'s customer login
   await page.goto('/orders/1')
   await expect(page.locator('text=ORD-0001')).toBeVisible({ timeout: 10_000 })
 })
+
+/**
+ * Live feedback: the Owner's Manage-users table showed a Customer row's
+ * role but never which project they were scoped to, and there was no way
+ * to fix a wrong assignment short of a direct database edit — "the
+ * Project assigned needs to be mentioned or can be updated (both from
+ * owner and Sales manager account)." PC deliberately excluded here,
+ * unlike create/reset-password above — only Owner and Sales Manager were
+ * named for this one.
+ */
+test('Sales Manager can move a project\'s customer login to a different project', async ({ page }) => {
+  await login(page, 'sana@businesslinks-pk.com', 'Password123!')
+
+  // Two brand-new projects, both created within this test — deliberately
+  // not reusing the shared PRJ-0001 fixture, since other specs sharing it
+  // may already have given it more than one customer login (nothing in
+  // this system enforces "exactly one customer per project"), which would
+  // make "back to the create form after moving the customer away" a false
+  // assumption if a second, unrelated customer were still on it.
+  async function createProject(number: string, title: string): Promise<string> {
+    await page.goto('/projects')
+    await page.fill('input[placeholder="Project number (e.g. PRJ-0007)"]', number)
+    await page.fill('input[placeholder="Customer name"]', 'Reassignment Test Co')
+    await page.fill('input[placeholder="Title"]', title)
+    await page.locator('select').nth(0).selectOption({ label: 'Sana Sales (sana@businesslinks-pk.com)' })
+    await page.locator('select').nth(1).selectOption({ label: 'Pia Coordinator (pia@businesslinks-pk.com)' })
+    await page.click('button:has-text("Create project")')
+    await expect(page.locator(`text=${number}`)).toBeVisible({ timeout: 10_000 })
+    await page.click(`text=${number}`)
+    await expect(page).toHaveURL(/\/projects\/\d+$/)
+    return page.url()
+  }
+
+  const sourceProjectUrl = await createProject('PRJ-MOVE-SRC', 'Reassignment source project')
+  const targetProjectUrl = await createProject('PRJ-MOVE-DST', 'Reassignment target project')
+
+  // A fresh customer login on the source project — guaranteed to be the
+  // only one there, since the project itself is brand new.
+  await page.goto(sourceProjectUrl)
+  const panel = page.locator('h2', { hasText: 'Customer login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  await panel.locator('input[placeholder="Customer contact name"]').fill('Reassign Test Contact')
+  await panel.locator('input[placeholder="Customer email"]').fill('reassign-test-fresh@textilemills.example')
+  await panel.locator('button:has-text("Create login")').click()
+  await expect(panel.locator('text=Temporary password:')).toBeVisible({ timeout: 10_000 })
+
+  // Move it to the target project.
+  await panel.locator('select').selectOption({ label: 'PRJ-MOVE-DST · Reassignment target project' })
+  await panel.locator('button:has-text("Move")').click()
+
+  // Gone from the source project — back to the create form.
+  await expect(panel.locator('input[placeholder="Customer contact name"]')).toBeVisible({ timeout: 10_000 })
+
+  // Now shows on the target project instead.
+  await page.goto(targetProjectUrl)
+  const newPanel = page.locator('h2', { hasText: 'Customer login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  await expect(newPanel.getByText('reassign-test-fresh@textilemills.example', { exact: true })).toBeVisible({ timeout: 10_000 })
+})

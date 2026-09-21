@@ -55,11 +55,15 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   // acceptances at stages 5/10/11/12 can be recorded by an actual customer. ---
   await login(page, 'owen@businesslinks-pk.com', 'Password123!')
   await page.goto('/users')
-  await page.fill('input[placeholder="Full name"]', 'Lifecycle Test Customer')
-  await page.fill('input[placeholder="Email"]', 'lifecycle-customer@textilemills.example')
-  await page.locator('select').first().selectOption({ label: 'Customer' })
-  await page.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
-  await page.locator('button:has-text("Create")').first().click()
+  // Scoped to the "Create a login" form specifically — each existing user
+  // row also has its own project-reassignment <select> (with the same
+  // "PRJ-0001" option text) since the Manage-users Project column was added.
+  const createForm = page.locator('h2', { hasText: 'Create a login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  await createForm.locator('input[placeholder="Full name"]').fill('Lifecycle Test Customer')
+  await createForm.locator('input[placeholder="Email"]').fill('lifecycle-customer@textilemills.example')
+  await createForm.locator('select').first().selectOption({ label: 'Customer' })
+  await createForm.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
+  await createForm.locator('button:has-text("Create")').click()
   const banner = page.locator('text=Temporary password for').locator('xpath=ancestor::div[contains(@class,"justify-between")][1]')
   await expect(banner).toBeVisible({ timeout: 10_000 })
   const customerPassword = await banner.locator('code').innerText()

@@ -112,7 +112,11 @@ $router->post('/api/users', function (Request $request): void {
 
 $router->patch('/api/users/{id}', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner']);
+    // Full account editing (role, status, name, email) stays Owner-only.
+    // Sales Manager gets one narrow exception, same shape as account
+    // creation/reset-password above: reassigning a Customer login's
+    // project — never anything else, never a non-customer user.
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager']);
 
     $id = (int) $params['id'];
     $existing = UserRepository::findById($id);
@@ -121,6 +125,15 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
     }
 
     $body = $request->body;
+
+    if ($claims['role'] !== 'company_owner') {
+        if ($existing['role'] !== 'customer') {
+            Response::error('Sales Manager can only reassign a Customer login\'s project.', 403);
+        }
+        if (array_diff(array_keys($body), ['scope_project_id']) !== []) {
+            Response::error('Sales Manager can only change which project a Customer login is scoped to.', 403);
+        }
+    }
 
     if (isset($body['role']) && !in_array($body['role'], UserRepository::VALID_ROLES, true)) {
         Response::error('Invalid role.', 422);
@@ -136,6 +149,16 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
     $finalEmail = $body['email'] ?? $existing['email'];
     if ($domainError = UserRepository::validateEmailDomain($finalRole, $finalEmail)) {
         Response::error($domainError, 422);
+    }
+
+    if (isset($body['scope_project_id']) && $finalRole === 'customer') {
+        $projectId = (int) $body['scope_project_id'];
+        if (!ProjectRepository::exists($projectId)) {
+            Response::error('scope_project_id must reference an existing project.', 422);
+        }
+        if ($claims['role'] !== 'company_owner' && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+            Response::error('You can only reassign a customer to a project you are assigned to.', 403);
+        }
     }
 
     if ($id === (int) $claims['sub'] && ($body['status'] ?? null) === 'inactive') {

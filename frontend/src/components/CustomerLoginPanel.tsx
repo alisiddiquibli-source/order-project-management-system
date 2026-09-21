@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ApiError, api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import type { User } from '../lib/types'
+import type { Project, User } from '../lib/types'
 
 /**
  * Each project has exactly one Customer login, but until now only the
@@ -15,10 +15,16 @@ import type { User } from '../lib/types'
 export function CustomerLoginPanel({ projectId }: { projectId: number }) {
   const { user } = useAuth()
   const canManage = user && ['company_owner', 'sales_manager', 'project_coordinator'].includes(user.role)
+  // Reassigning a customer to a different project is narrower than
+  // create/reset above — matches the backend's own gate on PATCH
+  // /api/users/{id} (Owner and Sales Manager only).
+  const canReassign = user && ['company_owner', 'sales_manager'].includes(user.role)
 
   const [customer, setCustomer] = useState<User | null | undefined>(undefined)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [projects, setProjects] = useState<Project[] | null>(null)
+  const [reassignTo, setReassignTo] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [revealedPassword, setRevealedPassword] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -33,6 +39,11 @@ export function CustomerLoginPanel({ projectId }: { projectId: number }) {
     reload().catch(() => setError('Could not load the customer login for this project.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, projectId])
+
+  useEffect(() => {
+    if (!canReassign) return
+    api.get<Project[]>('/projects').then(setProjects).catch(() => {})
+  }, [canReassign])
 
   async function handleCreate() {
     setSubmitting(true)
@@ -63,6 +74,21 @@ export function CustomerLoginPanel({ projectId }: { projectId: number }) {
       setRevealedPassword(result.temporary_password)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reset the password.')
+    }
+  }
+
+  async function handleReassign() {
+    if (!customer || !reassignTo) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await api.patch(`/users/${customer.id}`, { scope_project_id: Number(reassignTo) })
+      setReassignTo('')
+      await reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reassign the project.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -115,20 +141,48 @@ export function CustomerLoginPanel({ projectId }: { projectId: number }) {
       )}
 
       {customer && (
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-800">{customer.name}</p>
-            <p className="text-xs text-slate-500">{customer.email}</p>
-            <p className="text-xs text-slate-400">
-              {customer.status === 'active'
-                ? 'Active — can log in to record SAT, training, and handover acceptances.'
-                : 'Inactive.'}
-            </p>
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-slate-800">{customer.name}</p>
+              <p className="text-xs text-slate-500">{customer.email}</p>
+              <p className="text-xs text-slate-400">
+                {customer.status === 'active'
+                  ? 'Active — can log in to record SAT, training, and handover acceptances.'
+                  : 'Inactive.'}
+              </p>
+            </div>
+            <button type="button" onClick={handleResetPassword} className="shrink-0 text-sm font-medium text-brand-600 hover:underline">
+              Reset password
+            </button>
           </div>
-          <button type="button" onClick={handleResetPassword} className="shrink-0 text-sm font-medium text-brand-600 hover:underline">
-            Reset password
-          </button>
-        </div>
+
+          {canReassign && (
+            <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center">
+              <span className="text-xs text-slate-400">Wrong project? Move this login to:</span>
+              <select
+                value={reassignTo}
+                onChange={(e) => setReassignTo(e.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="">Which project?</option>
+                {projects?.filter((p) => p.id !== projectId).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.project_number} · {p.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleReassign}
+                disabled={submitting || !reassignTo}
+                className="rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                Move
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

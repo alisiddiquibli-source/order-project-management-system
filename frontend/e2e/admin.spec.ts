@@ -46,6 +46,38 @@ test.describe('account administration (§7.1)', () => {
     await expect(page.locator('text=must have a @businesslinks-pk.com email address')).toBeVisible()
   })
 
+  test('owner can see and reassign a customer\'s project from Manage users', async ({ page }) => {
+    await login(page, 'owen@businesslinks-pk.com', 'Password123!')
+
+    // A second project to reassign into — distinct number from the other
+    // fixtures/tests in this same file (PRJ-9001, PRJ-9002 are taken).
+    await page.goto('/projects')
+    await page.fill('input[placeholder="Project number (e.g. PRJ-0007)"]', 'PRJ-9003')
+    await page.fill('input[placeholder="Customer name"]', 'Reassign Target Co')
+    await page.fill('input[placeholder="Title"]', 'Reassignment target project')
+    await page.locator('select').nth(0).selectOption({ label: 'Sana Sales (sana@businesslinks-pk.com)' })
+    await page.locator('select').nth(1).selectOption({ label: 'Pia Coordinator (pia@businesslinks-pk.com)' })
+    await page.click('button:has-text("Create project")')
+    await expect(page.locator('text=PRJ-9003')).toBeVisible({ timeout: 10_000 })
+
+    await page.goto('/users')
+    await page.fill('input[placeholder="Full name"]', 'Owner Reassign Customer')
+    await page.fill('input[placeholder="Email"]', 'owner-reassign-customer@textilemills.example')
+    await page.locator('select').first().selectOption({ label: 'Customer' })
+    await page.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
+    await page.locator('button:has-text("Create")').first().click()
+
+    const row = page.locator('tr', { hasText: 'Owner Reassign Customer' })
+    await expect(row).toBeVisible({ timeout: 10_000 })
+    // Column order: Name, Email, Role[select], Project[select], Status, Actions.
+    const projectSelect = row.locator('select').nth(1)
+    await expect(projectSelect).toHaveValue('1')
+
+    await projectSelect.selectOption({ label: 'PRJ-9003 · Reassignment target project' })
+    await expect(page.locator('text=Could not reassign')).toHaveCount(0)
+    await expect(projectSelect).not.toHaveValue('1', { timeout: 10_000 })
+  })
+
   test('a non-owner is redirected away from the user-management page', async ({ page }) => {
     await login(page, 'pia@businesslinks-pk.com', 'Password123!')
     await page.goto('/users')

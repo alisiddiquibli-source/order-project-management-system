@@ -1019,3 +1019,53 @@ Verified live locally: full suite 25/25, including `full-lifecycle.spec.ts`
 extended to satisfy every new requirement (URS, LC, IQ/OQ/DQ, shipping
 document, coordinator contact, training attendee) at the stage it now
 gates, end to end, creation to handover.
+
+## Round 6 — Customer login's project assignment: mentioned, and reassignable
+
+Live feedback on the Owner's Manage-users screenshot: a Customer row
+showed its role but never which project it was scoped to, and there was
+no way to fix a wrong assignment short of a direct database edit —
+"the Project assigned needs to be mentioned or can be updated (both from
+owner and Sales manager account)."
+
+Backend: widened `PATCH /api/users/{id}` (previously Owner-only) to also
+accept Sales Manager, but only for one narrow action — changing
+`scope_project_id` on a Customer-role user, and only to a project they're
+actually assigned to (`ProjectRepository::findByIdForUser`, the same
+check already used for create/reset-password). Any other field, or a
+non-customer target, gets a 403. PC was **not** included here — this
+request named Owner and Sales Manager specifically, unlike the
+create/reset-password exception from Round 3 which named PC too.
+
+Frontend, two places since the two roles use different screens:
+- **`UserManagementPage`** (Owner): new "Project" column, showing "—" for
+  non-customer rows and an editable `<select>` of all projects for
+  Customer rows — reusing the `projects` list already fetched for the
+  create-login form.
+- **`CustomerLoginPanel`** (Sales Manager/PC, on `ProjectDetailPage`):
+  when a customer login exists, Owner/Sales Manager (not PC — matches the
+  backend gate) now see a "Wrong project? Move this login to:" control
+  scoped to projects they can see, excluding the current one.
+
+Regression-test note: `CustomerLoginPanel` shows only `results[0]` from
+`GET /users?role=customer&scope_project_id=X` — nothing in this system
+actually enforces "exactly one customer per project," so a shared
+fixture project accumulating multiple customer logins across specs (it
+does) breaks a naive "move it away, the panel goes back to the create
+form" assertion. Test built two brand-new, single-purpose projects
+instead of reusing `PRJ-0001` — worth remembering for any future spec
+touching `CustomerLoginPanel`.
+
+Adding the Project column's per-row `<select>` also broke three existing
+specs that picked a project dropdown via
+`page.locator('select').filter({ has: page.locator('option', { hasText:
+'PRJ-0001' }) })` — now ambiguous, since every Customer row's new
+reassignment `<select>` also carries a "PRJ-0001" option. Fixed by
+scoping all of them to the "Create a login" form container specifically
+(`external-role-redaction.spec.ts`, `full-lifecycle.spec.ts`,
+`user-role-scoping.spec.ts`) — another instance of the pattern this
+project keeps hitting: a new element sharing text with an existing
+unscoped locator, not a real regression in the feature itself.
+
+Full suite now 27/27 (2 new tests: the Owner's reassignment from Manage
+users, and the Sales Manager's from `CustomerLoginPanel`).

@@ -20,23 +20,27 @@ test('Customer and Supplier logins never see the internal staffing row', async (
   await login(page, 'owen@businesslinks-pk.com', 'Password123!')
   await page.goto('/users')
 
-  // Customer, scoped to the fixture project.
-  await page.fill('input[placeholder="Full name"]', 'Redaction Test Customer')
-  await page.fill('input[placeholder="Email"]', 'redaction-customer@textilemills.example')
-  await page.locator('select').first().selectOption({ label: 'Customer' })
-  await page.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
-  await page.locator('button:has-text("Create")').first().click()
+  // Customer, scoped to the fixture project. Scoped to the "Create a
+  // login" form specifically — each existing user row also has its own
+  // project-reassignment <select> (with the same "PRJ-0001" option text)
+  // since the Manage-users Project column was added.
+  const createForm = page.locator('h2', { hasText: 'Create a login' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+  await createForm.locator('input[placeholder="Full name"]').fill('Redaction Test Customer')
+  await createForm.locator('input[placeholder="Email"]').fill('redaction-customer@textilemills.example')
+  await createForm.locator('select').first().selectOption({ label: 'Customer' })
+  await createForm.locator('select').filter({ has: page.locator('option', { hasText: 'PRJ-0001' }) }).selectOption({ label: 'PRJ-0001 · New spinning line' })
+  await createForm.locator('button:has-text("Create")').click()
   const customerBanner = page.locator('text=Temporary password for').locator('xpath=ancestor::div[contains(@class,"justify-between")][1]')
   await expect(customerBanner).toBeVisible({ timeout: 10_000 })
   const customerPassword = await customerBanner.locator('code').innerText()
   await customerBanner.locator('button:has-text("Dismiss")').click()
 
   // Supplier, scoped to the fixture supplier company.
-  await page.fill('input[placeholder="Full name"]', 'Redaction Test Supplier')
-  await page.fill('input[placeholder="Email"]', 'redaction-supplier@acme-machines.example')
-  await page.locator('select').first().selectOption({ label: 'Supplier' })
-  await page.locator('select').filter({ has: page.locator('option', { hasText: 'Acme Machines GmbH' }) }).selectOption({ label: 'Acme Machines GmbH' })
-  await page.locator('button:has-text("Create")').first().click()
+  await createForm.locator('input[placeholder="Full name"]').fill('Redaction Test Supplier')
+  await createForm.locator('input[placeholder="Email"]').fill('redaction-supplier@acme-machines.example')
+  await createForm.locator('select').first().selectOption({ label: 'Supplier' })
+  await createForm.locator('select').filter({ has: page.locator('option', { hasText: 'Acme Machines GmbH' }) }).selectOption({ label: 'Acme Machines GmbH' })
+  await createForm.locator('button:has-text("Create")').click()
   const supplierBanner = page.locator('text=Temporary password for').locator('xpath=ancestor::div[contains(@class,"justify-between")][1]')
   await expect(supplierBanner).toBeVisible({ timeout: 10_000 })
   const supplierPassword = await supplierBanner.locator('code').innerText()
