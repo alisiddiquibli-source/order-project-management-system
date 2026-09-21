@@ -69,6 +69,29 @@ one.** Concretely, what that means here:
   file, the same way every prior round of this project's design has been
   recorded — don't let a decision live only in a chat message.
 
+## Deployment handoff to Chrome (standing instruction)
+
+This sandbox has no network path to `m.businesslinks-pk.com` — every
+deploy is handed off to the user's separate Chrome-extension Claude
+session as a self-contained prompt, after building+testing locally and
+pushing to `main`. That handoff always includes, in this order:
+
+1. **Schema migration first, if one is needed** — the exact `CREATE
+   TABLE`/`ALTER TABLE` SQL to run in phpMyAdmin, called out as
+   pure-addition/safe or flagged if it touches existing data.
+2. **Backend files** — exact paths to replace (or add, for new files),
+   pinned to the commit hash just pushed.
+3. **Frontend zip** — extract into the document root, overwriting
+   existing files. **When the prompt reaches the zip upload step, it
+   always tells Chrome to click Upload and then stop** — never to try
+   picking the file itself. Chrome cannot drive the OS-native file
+   picker that opens next; the user selects the file from Downloads
+   themselves. This is a hard rule, not a one-off reminder — every
+   deployment prompt written for this project must include it exactly
+   this way for the zip/file-upload step, without being asked again.
+4. **A verification step** — hard-refresh, check the loaded JS bundle
+   hash in View Source matches the just-built one, confirm no errors.
+
 ## UX principle (standing requirement — see ARCHITECTURE.md §11.1)
 
 Seven very different audiences use this system. **Every screen must be
