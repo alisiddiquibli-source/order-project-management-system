@@ -873,3 +873,41 @@ Sales-Manager/PC customer-login create+reset, run against the same
 shared `PRJ-0001` fixture other specs already use — written to tolerate
 either "no customer yet" or "one already exists" on that project,
 since spec execution order isn't something to assume).
+
+## Round 4 — "Customer acceptance is not working"
+
+Live report, with a screenshot: SAT stage showed "Accepted by a Sales
+Manager — Not yet customer-confirmed" and an Accept button, and clicking
+Accept as the customer appeared to do nothing — the banner never changed.
+
+Real bug, in `AcceptanceSection.tsx` only — not the backend. Acceptances
+are append-only (a correction is a new row, never an edit), and
+`GET .../acceptances` already returns them newest-first (`ORDER BY id
+DESC`). The component computed `latest` as `acceptances[acceptances.length
+- 1]`, i.e. the *last* array element — which, in a newest-first array, is
+the *oldest* row, not the latest. The very first acceptance ever recorded
+for a stage (here, the Sales Manager's provisional one) stayed pinned on
+screen forever afterward, no matter how many further acceptances —
+including the customer's own — were added on top of it. Fixed to
+`acceptances[0]`.
+
+Confirming this pinned-to-oldest read was scoped to display only: the
+backend's own stage-completion check
+(`StageCompletionEvaluator::evaluateFatSat` and its SAT/Training/Handover
+counterparts) already ran `ORDER BY id DESC LIMIT 1` directly in SQL, so
+a customer's acceptance was always being correctly honored for actually
+unblocking the stage — customers just never saw it reflected, which
+reads identically to "broken" from their side and is exactly the kind of
+thing worth fixing regardless of the backend being sound underneath.
+
+Caught by extending `full-lifecycle.spec.ts`'s SAT step: a Sales Manager
+now accepts first (no evidence document), *then* the real customer
+accepts, and the test asserts the banner correctly flips to "Genuine
+customer acceptance." Every prior acceptance test in this suite only
+ever recorded one acceptance per stage, so `acceptances.length - 1` and
+`acceptances[0]` were indistinguishable — a single-acceptance flow can't
+catch this class of bug; a stage needs at least two, in the exact
+Sales-Manager-then-customer order production hit, to tell them apart.
+
+Full suite still 25/25 with this change folded into the existing
+full-lifecycle test (no new spec file needed).

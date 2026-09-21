@@ -202,14 +202,32 @@ test('full order lifecycle: creation through handover, using Sales Manager + PC 
   await expect(page.locator('text=Result: pass')).toBeVisible({ timeout: 10_000 })
   await logout(page)
 
+  // A Sales Manager provisionally accepts first (no customer-authorization
+  // evidence attached yet) — the real-world sequence a live production
+  // report was built around: "Accepted by a Sales Manager — Not yet
+  // customer-confirmed" stuck on screen even after the customer accepted.
+  // Root cause was AcceptanceSection picking acceptances[acceptances.length
+  // - 1] as "latest", when the backend already returns them newest-first —
+  // that grabbed the *first* acceptance ever recorded forever, not the
+  // most recent one. Regression-tested here with two acceptances on the
+  // same stage, which a single-acceptance flow can't catch.
+  await login(page, 'sana@businesslinks-pk.com', 'Password123!')
+  await page.goto(orderUrl)
+  await expandStage(page, 'SAT (Site Acceptance Test)')
+  await page.getByRole('button', { name: 'Accept', exact: true }).click()
+  await expect(page.locator('text=Not yet customer-confirmed')).toBeVisible({ timeout: 10_000 })
+  await logout(page)
+
   await login(page, 'lifecycle-customer@textilemills.example', customerPassword)
   await page.goto(orderUrl)
   await expandStage(page, 'SAT (Site Acceptance Test)')
+  await expect(page.locator('text=Accepted by a Sales Manager')).toBeVisible({ timeout: 10_000 })
   // Exact match, not has-text: "Accept" is also a substring of "Site
   // Acceptance Test", which matches this stage's own collapse/expand
   // header button and would toggle it shut instead of clicking Accept.
   await page.getByRole('button', { name: 'Accept', exact: true }).click()
   await expect(page.locator('text=Genuine customer acceptance')).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('text=Accepted by the customer')).toBeVisible()
   await logout(page)
 
   await login(page, 'pia@businesslinks-pk.com', 'Password123!')

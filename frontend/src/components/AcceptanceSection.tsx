@@ -91,7 +91,13 @@ export function AcceptanceSection({
     }
   }
 
-  const latest = acceptances?.[acceptances.length - 1] ?? null
+  // The backend already returns these newest-first (`ORDER BY id DESC`) —
+  // acceptances is append-only, so a customer's new acceptance after a
+  // Sales Manager's earlier one is index 0, not the last element. Taking
+  // the last element here previously showed whichever acceptance was
+  // recorded *first* forever, no matter how many were added after it —
+  // which looked exactly like "the customer's Accept click does nothing."
+  const latest = acceptances?.[0] ?? null
 
   return (
     <div className="rounded-lg border border-slate-200 p-3">
