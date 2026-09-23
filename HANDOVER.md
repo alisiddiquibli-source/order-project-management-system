@@ -217,7 +217,7 @@ Run SQL in phpMyAdmin on database `usineul0_bli_orders`.
 ### Pending / Open Questions
 - **Task #27:** Confirm live that Sales Manager's customer-reassignment panel works (was blocked by Hamza's 401; now that Hamza is HR Manager, Sana (`sana@`) is the Sales Manager to test with)
 - **Project auto-completion:** `projects.status` is never set to `completed` — no code does this. Decision needed: automatic (when all orders reach Handover) or manual Owner/PC button? **Not implemented yet.**
-- **Backend PHP files for HR Manager** — as of 2026-09-23, the 5 PHP files may still need to be uploaded to `~/m.businesslinks-pk.com/api/src/` if the manual upload via php-hr-manager.zip hasn't been completed yet. Zip is in the session's scratchpad.
+- ~~Backend PHP files for HR Manager~~ — **DONE 2026-09-23.** All 5 files uploaded and in place on the server (`~/m.businesslinks-pk.com/api/src/`): `Auth/Scope.php`, `Models/UserRepository.php`, `routes/users.php`, `routes/projects.php`, `routes/orders.php`.
 
 ---
 
