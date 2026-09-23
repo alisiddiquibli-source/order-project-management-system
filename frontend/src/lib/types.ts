@@ -4,6 +4,7 @@ export type Role =
   | 'project_coordinator'
   | 'import_manager'
   | 'installation_engineer'
+  | 'hr_manager'
   | 'supplier'
   | 'customer'
 

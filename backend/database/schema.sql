@@ -25,7 +25,7 @@ CREATE TABLE users (
     password_hash       VARCHAR(255) NOT NULL,
     role                ENUM('company_owner','sales_manager','project_coordinator',
                               'import_manager','installation_engineer',
-                              'supplier','customer') NOT NULL,
+                              'hr_manager','supplier','customer') NOT NULL,
     status              ENUM('active','inactive') NOT NULL DEFAULT 'active',
     -- set only for customer logins: which project they may see (every order in it)
     scope_project_id    INT UNSIGNED NULL,

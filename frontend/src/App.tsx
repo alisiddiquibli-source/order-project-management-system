@@ -22,6 +22,7 @@ function HomePage() {
 
   switch (user?.role) {
     case 'company_owner':
+    case 'hr_manager':
       return <OwnerDashboardPage />
     case 'sales_manager':
       return <SalesManagerDashboardPage />
@@ -53,10 +54,10 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-/** Account administration (§7.1) is Owner-only — matches the backend's own gate. */
-function RequireOwner({ children }: { children: ReactNode }) {
+/** Account administration is Owner/HR Manager — matches the backend's own gate. */
+function RequireOwnerOrHr({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  return user?.role === 'company_owner' ? <>{children}</> : <Navigate to="/" replace />
+  return user && ['company_owner', 'hr_manager'].includes(user.role) ? <>{children}</> : <Navigate to="/" replace />
 }
 
 export default function App() {
@@ -107,9 +108,9 @@ export default function App() {
         path="/users"
         element={
           <ProtectedRoute>
-            <RequireOwner>
+            <RequireOwnerOrHr>
               <UserManagementPage />
-            </RequireOwner>
+            </RequireOwnerOrHr>
           </ProtectedRoute>
         }
       />

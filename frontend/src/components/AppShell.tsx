@@ -8,6 +8,7 @@ const ROLE_LABELS: Record<string, string> = {
   project_coordinator: 'Project Coordinator',
   import_manager: 'Import Manager',
   installation_engineer: 'Installation & Service Engineer',
+  hr_manager: 'HR Manager',
   supplier: 'Supplier',
   customer: 'Customer',
 }
@@ -30,12 +31,12 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
           </div>
           <div className="flex items-center gap-4">
             <nav className="hidden items-center gap-4 text-sm font-medium text-slate-600 sm:flex">
-              {user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role) && (
+              {user && ['sales_manager', 'project_coordinator', 'company_owner', 'hr_manager'].includes(user.role) && (
                 <Link to="/projects" className="hover:text-brand-600">
                   Projects
                 </Link>
               )}
-              {user?.role === 'company_owner' && (
+              {user && ['company_owner', 'hr_manager'].includes(user.role) && (
                 <Link to="/users" className="hover:text-brand-600">
                   Manage users
                 </Link>

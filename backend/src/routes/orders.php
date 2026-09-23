@@ -33,13 +33,13 @@ $router->post('/api/orders', function (Request $request): void {
     // rather than being blocked when no PC is available — this only widens
     // who can additionally create the record, not who's accountable for
     // running it day to day.
-    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner']);
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner', 'hr_manager']);
 
     $body = $request->body;
     $required = ['project_id', 'order_number', 'machine_name', 'supplier_id', 'installation_engineer_id'];
-    // Only the Owner gets to leave the dates for the Sales Manager/PC to
-    // fill in afterward — a PC creating the order still has to know them.
-    if ($claims['role'] !== 'company_owner') {
+    // Owner and HR Manager may leave dates for the Sales Manager/PC to fill
+    // in afterward; a PC creating the order still has to know them.
+    if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
         $required[] = 'start_date';
         $required[] = 'target_handover_date';
     }
@@ -93,7 +93,7 @@ $router->post('/api/orders', function (Request $request): void {
 // details or the supplier, which stay a PC/Owner call.
 $router->patch('/api/orders/{id}', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['project_coordinator', 'company_owner', 'sales_manager']);
+    Authenticator::requireRole($request, ['project_coordinator', 'company_owner', 'sales_manager', 'hr_manager']);
 
     $orderId = (int) $params['id'];
     OrderAccess::requireVisibleOrder($orderId, $claims);
@@ -125,7 +125,7 @@ $router->patch('/api/orders/{id}', function (Request $request, array $params): v
 
 $router->patch('/api/orders/{id}/status', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['sales_manager', 'company_owner']);
+    Authenticator::requireRole($request, ['sales_manager', 'company_owner', 'hr_manager']);
 
     $orderId = (int) $params['id'];
     OrderAccess::requireVisibleOrder($orderId, $claims);
@@ -142,7 +142,7 @@ $router->patch('/api/orders/{id}/status', function (Request $request, array $par
 
 $router->patch('/api/orders/{id}/target-handover-date', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner']);
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner', 'hr_manager']);
 
     $orderId = (int) $params['id'];
     OrderAccess::requireVisibleOrder($orderId, $claims);

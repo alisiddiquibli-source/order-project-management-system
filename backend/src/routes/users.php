@@ -19,15 +19,15 @@ use Bli\Models\UserRepository;
 
 $router->get('/api/users', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
+    Authenticator::requireRole($request, ['company_owner', 'hr_manager', 'sales_manager', 'project_coordinator']);
 
-    // Non-owners only get this for populating a role-scoped picker (e.g.
+    // Non-owners/non-HR only get this for populating a role-scoped picker (e.g.
     // "choose a Sales Manager" when creating a project) — never the full
     // admin listing across every role/status.
     $role = $request->query['role'] ?? null;
     $scopeProjectId = isset($request->query['scope_project_id']) ? (int) $request->query['scope_project_id'] : null;
 
-    if ($claims['role'] !== 'company_owner') {
+    if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
         if ($role === null) {
             Response::error('role is required.', 422);
         }
@@ -50,11 +50,11 @@ $router->get('/api/users', function (Request $request): void {
 
 $router->post('/api/users', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
-    // Full account administration (any role) stays Owner-only. Sales
+    // Full account administration (any role): Owner and HR Manager. Sales
     // Manager/PC get one narrow exception below: a Customer login for a
     // project they're actually assigned to, since they're the ones who
     // need the customer logged in (e.g. for SAT approval).
-    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
+    Authenticator::requireRole($request, ['company_owner', 'hr_manager', 'sales_manager', 'project_coordinator']);
 
     $body = $request->body;
     foreach (['name', 'email', 'role'] as $field) {
@@ -69,7 +69,7 @@ $router->post('/api/users', function (Request $request): void {
     if (!in_array($role, UserRepository::VALID_ROLES, true)) {
         Response::error('Invalid role.', 422);
     }
-    if ($claims['role'] !== 'company_owner' && $role !== 'customer') {
+    if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true) && $role !== 'customer') {
         Response::error('Sales Manager and Project Coordinator can only create a Customer login.', 403);
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -96,7 +96,7 @@ $router->post('/api/users', function (Request $request): void {
         if ($projectId === null || !ProjectRepository::exists($projectId)) {
             Response::error('scope_project_id must reference an existing project for a customer login.', 422);
         }
-        if ($claims['role'] !== 'company_owner' && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+        if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true) && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
             Response::error('You can only create a customer login for a project you are assigned to.', 403);
         }
     }
@@ -112,11 +112,11 @@ $router->post('/api/users', function (Request $request): void {
 
 $router->patch('/api/users/{id}', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    // Full account editing (role, status, name, email) stays Owner-only.
+    // Full account editing (role, status, name, email): Owner and HR Manager.
     // Sales Manager gets one narrow exception, same shape as account
     // creation/reset-password above: reassigning a Customer login's
     // project — never anything else, never a non-customer user.
-    Authenticator::requireRole($request, ['company_owner', 'sales_manager']);
+    Authenticator::requireRole($request, ['company_owner', 'hr_manager', 'sales_manager']);
 
     $id = (int) $params['id'];
     $existing = UserRepository::findById($id);
@@ -126,7 +126,7 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
 
     $body = $request->body;
 
-    if ($claims['role'] !== 'company_owner') {
+    if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
         if ($existing['role'] !== 'customer') {
             Response::error('Sales Manager can only reassign a Customer login\'s project.', 403);
         }
@@ -156,7 +156,7 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
         if (!ProjectRepository::exists($projectId)) {
             Response::error('scope_project_id must reference an existing project.', 422);
         }
-        if ($claims['role'] !== 'company_owner' && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
+        if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true) && ProjectRepository::findByIdForUser($projectId, $claims) === null) {
             Response::error('You can only reassign a customer to a project you are assigned to.', 403);
         }
     }
@@ -170,7 +170,7 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
 
 $router->post('/api/users/{id}/reset-password', function (Request $request, array $params): void {
     $claims = Authenticator::requireAuth($request);
-    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
+    Authenticator::requireRole($request, ['company_owner', 'hr_manager', 'sales_manager', 'project_coordinator']);
 
     $id = (int) $params['id'];
     $target = UserRepository::findById($id);
@@ -178,7 +178,7 @@ $router->post('/api/users/{id}/reset-password', function (Request $request, arra
         Response::error('User not found.', 404);
     }
 
-    if ($claims['role'] !== 'company_owner') {
+    if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
         // Same narrow exception as account creation — only that project's
         // own Customer login, only for someone assigned to it.
         if ($target['role'] !== 'customer'

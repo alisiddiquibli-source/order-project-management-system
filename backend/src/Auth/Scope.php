@@ -23,7 +23,7 @@ final class Scope
         $userId = (int) ($claims['sub'] ?? 0);
 
         return match ($role) {
-            'company_owner', 'import_manager' => ['sql' => '1=1', 'params' => []],
+            'company_owner', 'import_manager', 'hr_manager' => ['sql' => '1=1', 'params' => []],
             'sales_manager' => [
                 'sql' => 'p.sales_manager_id = :scope_user_id',
                 'params' => ['scope_user_id' => $userId],
@@ -68,7 +68,7 @@ final class Scope
         $userId = (int) ($claims['sub'] ?? 0);
 
         return match ($role) {
-            'company_owner', 'import_manager' => ['sql' => '1=1', 'params' => []],
+            'company_owner', 'import_manager', 'hr_manager' => ['sql' => '1=1', 'params' => []],
             'sales_manager' => [
                 'sql' => 'pr.sales_manager_id = :scope_user_id',
                 'params' => ['scope_user_id' => $userId],

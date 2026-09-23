@@ -29,7 +29,7 @@ $router->post('/api/projects', function (Request $request): void {
     $claims = Authenticator::requireAuth($request);
     // Data entry — creation is open to whoever originates the deal
     // (Sales Manager), the PC who'll run it day to day, or the Owner.
-    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner']);
+    Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner', 'hr_manager']);
 
     $body = $request->body;
     $required = ['project_number', 'customer_name', 'title', 'sales_manager_id', 'project_coordinator_id'];

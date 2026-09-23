@@ -9,6 +9,7 @@ const ROLE_LABELS: Record<Role, string> = {
   project_coordinator: 'Project Coordinator',
   import_manager: 'Import Manager',
   installation_engineer: 'Installation & Service Engineer',
+  hr_manager: 'HR Manager',
   supplier: 'Supplier',
   customer: 'Customer',
 }

@@ -11,7 +11,7 @@ final class UserRepository
 {
     public const VALID_ROLES = [
         'company_owner', 'sales_manager', 'project_coordinator',
-        'import_manager', 'installation_engineer', 'supplier', 'customer',
+        'import_manager', 'installation_engineer', 'hr_manager', 'supplier', 'customer',
     ];
 
     private const INTERNAL_EMAIL_DOMAIN = '@businesslinks-pk.com';
