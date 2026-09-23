@@ -17,7 +17,13 @@ Internal roles, in accountability order:
 1. **Company Owner** — full visibility across every project/order, account
    administration, and the configurable system thresholds (SLA windows,
    escalation days). No project data entry.
-2. **Sales Manager** — accountable custodian, assigned per **project**.
+2. **HR Manager** — near-Owner visibility and user management. Can create
+   any role, reset passwords, activate/deactivate users. **Cannot modify
+   or reset the Company Owner's account/password** (403 server-side).
+   **No delete rights** on projects/orders. Role is immutable after
+   creation for all users (enforced by the backend, shown as plain text
+   in the frontend — no dropdown).
+3. **Sales Manager** — accountable custodian, assigned per **project**.
    Full read visibility, directs the PC, holds acceptance authority
    (see the SAT/handover rule below), approves `stage_exceptions`,
    order hold/cancel, and customer-facing date changes.
@@ -300,17 +306,21 @@ plan to "prettify later."
   file gets unwieldy — that's already why this isn't one big
   `routes.php`.
 - `src/routes/users.php` — account administration (docs/ARCHITECTURE.md
-  §7.1), Company Owner only except `PATCH /api/me/password` (any
-  authenticated user, to set their own password after receiving a
-  temporary one). Creating a user or resetting a password generates a
-  random plaintext password, returned exactly once in that response —
-  never stored, never logged, never retrievable again. Validates the
-  same `@businesslinks-pk.com` domain rule the `users` table triggers
-  enforce (`UserRepository::validateEmailDomain()`), so a bad request
-  from this API gets a clean 422 instead of relying solely on the
-  trigger. An Owner cannot deactivate their own account
-  (`PATCH /api/users/{id}` with `status: inactive` on your own id is
-  rejected) — the one self-lockout guard this route needs.
+  §7.1), Company Owner and HR Manager except `PATCH /api/me/password`
+  (any authenticated user). Sales Manager/PC get one narrow exception:
+  creating/resetting a Customer login for a project they're assigned to.
+  Creating a user or resetting a password generates a random plaintext
+  password, returned exactly once in that response — never stored, never
+  logged, never retrievable again. Validates the same
+  `@businesslinks-pk.com` domain rule the `users` table triggers enforce
+  (`UserRepository::validateEmailDomain()`), so a bad request from this
+  API gets a clean 422 instead of relying solely on the trigger.
+  **HR Manager cannot modify or reset the Company Owner's password/status**
+  (403). **Role is immutable after creation** — `PATCH /api/users/{id}`
+  rejects any `role` field (422), and `UserRepository::update()` no longer
+  includes `role` in the updatable columns. An Owner cannot deactivate
+  their own account (`PATCH /api/users/{id}` with `status: inactive` on
+  your own id is rejected) — the one self-lockout guard this route needs.
 - `cron/check_stage_deadlines.php` — thin CLI entry point; the actual
   logic lives in `src/Domain/DeadlineScanner.php` so it's testable
   without shelling out. Run daily via Bluehost cPanel cron. Idempotent —
