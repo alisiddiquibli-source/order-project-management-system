@@ -126,6 +126,10 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
 
     $body = $request->body;
 
+    if ($claims['role'] === 'hr_manager' && $existing['role'] === 'company_owner') {
+        Response::error('HR Manager cannot modify the Company Owner account.', 403);
+    }
+
     if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
         if ($existing['role'] !== 'customer') {
             Response::error('Sales Manager can only reassign a Customer login\'s project.', 403);
@@ -176,6 +180,10 @@ $router->post('/api/users/{id}/reset-password', function (Request $request, arra
     $target = UserRepository::findById($id);
     if ($target === null) {
         Response::error('User not found.', 404);
+    }
+
+    if ($claims['role'] === 'hr_manager' && $target['role'] === 'company_owner') {
+        Response::error('HR Manager cannot reset the Company Owner password.', 403);
     }
 
     if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {

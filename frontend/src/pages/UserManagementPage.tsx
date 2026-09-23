@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppShell } from '../components/AppShell'
 import { ApiError, api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import type { Project, Role, Supplier, User } from '../lib/types'
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -22,6 +23,7 @@ const ROLE_LABELS: Record<Role, string> = {
  * so the Owner has to actually hand it to the person before navigating away.
  */
 export function UserManagementPage() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<User[] | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[] | null>(null)
   const [projects, setProjects] = useState<Project[] | null>(null)
@@ -259,7 +261,8 @@ export function UserManagementPage() {
                   <select
                     value={user.role}
                     onChange={(e) => handleRoleChange(user, e.target.value as Role)}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    disabled={currentUser?.role === 'hr_manager' && user.role === 'company_owner'}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
                   >
                     {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
                       <option key={r} value={r}>
@@ -292,14 +295,18 @@ export function UserManagementPage() {
                   </span>
                 </td>
                 <td className="px-4 py-2">
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => handleToggleStatus(user)} className="text-xs font-medium text-brand-600 hover:underline">
-                      {user.status === 'active' ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                    <button type="button" onClick={() => handleResetPassword(user)} className="text-xs font-medium text-brand-600 hover:underline">
-                      Reset password
-                    </button>
-                  </div>
+                  {currentUser?.role === 'hr_manager' && user.role === 'company_owner' ? (
+                    <span className="text-xs text-slate-400">—</span>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => handleToggleStatus(user)} className="text-xs font-medium text-brand-600 hover:underline">
+                        {user.status === 'active' ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      <button type="button" onClick={() => handleResetPassword(user)} className="text-xs font-medium text-brand-600 hover:underline">
+                        Reset password
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
