@@ -80,7 +80,18 @@ pushing to `main`. That handoff always includes, in this order:
    TABLE`/`ALTER TABLE` SQL to run in phpMyAdmin, called out as
    pure-addition/safe or flagged if it touches existing data.
 2. **Backend files** — exact paths to replace (or add, for new files),
-   pinned to the commit hash just pushed.
+   pinned to the commit hash just pushed. **The deployment path for
+   backend PHP is `~/bli-app/backend/src/`** (navigate in cPanel File
+   Manager to `bli-app` → `backend` → `src`), NOT
+   `~/m.businesslinks-pk.com/api/src/`. The server's
+   `api/index.php` hardcodes
+   `BACKEND_DIR = '/home3/usineul0/bli-app/backend'` so all PHP
+   source is loaded from there. The `api/src/` directory under the
+   document root exists but is **ignored** by the running application.
+   **The Chrome prompt for backend deployment must fetch raw file
+   content from GitHub (using the raw file URLs from the specific
+   commit) and navigate cPanel File Manager to
+   `bli-app/backend/src/<subfolder>/` to upload each file.**
 3. **Frontend zip** — extract into the document root, overwriting
    existing files. **When the prompt reaches the zip upload step, it
    always tells Chrome to click Upload and then stop** — never to try
@@ -91,6 +102,17 @@ pushing to `main`. That handoff always includes, in this order:
    this way for the zip/file-upload step, without being asked again.
 4. **A verification step** — hard-refresh, check the loaded JS bundle
    hash in View Source matches the just-built one, confirm no errors.
+
+### Server path quick reference (for deployment prompts)
+
+| What | cPanel path |
+|---|---|
+| Frontend | `~/m.businesslinks-pk.com/` |
+| API entry point | `~/m.businesslinks-pk.com/api/index.php` |
+| **Backend source** | **`~/bli-app/backend/src/`** |
+| Backend vendor | `~/bli-app/backend/vendor/` |
+| Backend .env | `~/bli-app/backend/.env` |
+| Database | `usineul0_bli_orders` (phpMyAdmin) |
 
 ## UX principle (standing requirement — see ARCHITECTURE.md §11.1)
 

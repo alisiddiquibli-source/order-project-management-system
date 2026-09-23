@@ -18,12 +18,22 @@ A full-stack web application for BLI to manage capital-equipment sales orders fr
 
 | What | Server path |
 |---|---|
-| cPanel account | `usineul0` |
+| cPanel account | `usineul0` (home: `/home3/usineul0/`) |
 | Frontend (React SPA) | `~/m.businesslinks-pk.com/` (index.html + assets/) |
-| Backend (PHP API) | `~/m.businesslinks-pk.com/api/` |
-| Backend source | `~/m.businesslinks-pk.com/api/src/` |
+| Backend entry point | `~/m.businesslinks-pk.com/api/index.php` |
+| **Backend source (REAL)** | **`~/bli-app/backend/src/`** |
+| Backend vendor | `~/bli-app/backend/vendor/` |
+| Backend .env | `~/bli-app/backend/.env` |
 | Database | `usineul0_bli_orders` (MariaDB via cPanel) |
 | **Not** the database | `usineul0_housekeeping_db` — separate, do not touch |
+
+### CRITICAL — Backend path indirection
+
+The API entry point is `~/m.businesslinks-pk.com/api/index.php`, but it does **NOT** use `__DIR__`-relative paths. It hardcodes:
+```php
+define('BACKEND_DIR', '/home3/usineul0/bli-app/backend');
+```
+This means ALL backend PHP is loaded from `~/bli-app/backend/`, not from `~/m.businesslinks-pk.com/api/src/`. The `api/src/` directory under the document root is **ignored by the running application**. When deploying backend changes, files MUST go to `~/bli-app/backend/src/` — uploading to `~/m.businesslinks-pk.com/api/src/` has no effect.
 
 **No git auto-deploy is configured.** Backend PHP files must be uploaded manually via cPanel File Manager. Frontend is built locally (`npm run build`), zipped, and uploaded as a zip then extracted.
 
@@ -187,7 +197,9 @@ npm run build          # produces dist/
 **Chrome file-picker rule:** Tell Chrome to click Upload, then STOP. User picks the file from Downloads themselves.
 
 ### Backend PHP
-Upload changed files individually via cPanel File Manager to `~/m.businesslinks-pk.com/api/src/` (matching the subfolder structure: Auth/, Models/, routes/).
+Upload changed files individually via cPanel File Manager to **`~/bli-app/backend/src/`** (matching the subfolder structure: Auth/, Models/, routes/, Domain/, Http/, etc.).
+
+**NOT** `~/m.businesslinks-pk.com/api/src/` — that path exists but is ignored. See §2 above for why.
 
 ### Database migrations
 Run SQL in phpMyAdmin on database `usineul0_bli_orders`.
@@ -217,7 +229,7 @@ Run SQL in phpMyAdmin on database `usineul0_bli_orders`.
 ### Pending / Open Questions
 - **Task #27:** Confirm live that Sales Manager's customer-reassignment panel works (was blocked by Hamza's 401; now that Hamza is HR Manager, Sana (`sana@`) is the Sales Manager to test with)
 - **Project auto-completion:** `projects.status` is never set to `completed` — no code does this. Decision needed: automatic (when all orders reach Handover) or manual Owner/PC button? **Not implemented yet.**
-- ~~Backend PHP files for HR Manager~~ — **DONE 2026-09-23.** All 5 files uploaded and in place on the server (`~/m.businesslinks-pk.com/api/src/`): `Auth/Scope.php`, `Models/UserRepository.php`, `routes/users.php`, `routes/projects.php`, `routes/orders.php`.
+- ~~Backend PHP files for HR Manager~~ — Code committed to GitHub. **Must be uploaded to `~/bli-app/backend/src/`** (not `~/m.businesslinks-pk.com/api/src/`): `Auth/Scope.php`, `Models/UserRepository.php`, `routes/users.php`, `routes/projects.php`, `routes/orders.php`.
 
 ---
 
@@ -225,7 +237,7 @@ Run SQL in phpMyAdmin on database `usineul0_bli_orders`.
 
 Paste this into the new session:
 
-> "This is a continuation of the BLI Order & Project Lifecycle Management System build. The GitHub repo is `alisiddiquibli-source/order-project-management-system`, branch `main`. The live site is at `m.businesslinks-pk.com`. Backend PHP is at `~/m.businesslinks-pk.com/api/src/` on Bluehost cPanel. Database is `usineul0_bli_orders`. The HANDOVER.md file in the repo root has the full project state. Read it and then read CLAUDE.md for standing instructions before making any changes."
+> "This is a continuation of the BLI Order & Project Lifecycle Management System build. The GitHub repo is `alisiddiquibli-source/order-project-management-system`, branch `main`. The live site is at `m.businesslinks-pk.com`. Backend PHP source is at `~/bli-app/backend/src/` on Bluehost cPanel (NOT `~/m.businesslinks-pk.com/api/src/` — the entry point at `api/index.php` hardcodes `BACKEND_DIR = '/home3/usineul0/bli-app/backend'`). Database is `usineul0_bli_orders`. The HANDOVER.md file in the repo root has the full project state. Read it and then read CLAUDE.md for standing instructions before making any changes."
 
 Then point it to this file: `HANDOVER.md` and `CLAUDE.md` in the repo root.
 
