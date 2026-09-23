@@ -133,7 +133,7 @@ final class UserRepository
      */
     public static function update(int $id, array $data): array
     {
-        $fields = ['name', 'email', 'role', 'status', 'scope_project_id', 'supplier_id'];
+        $fields = ['name', 'email', 'status', 'scope_project_id', 'supplier_id'];
         $sets = [];
         $params = ['id' => $id];
         foreach ($fields as $field) {

@@ -89,16 +89,6 @@ export function UserManagementPage() {
     }
   }
 
-  async function handleRoleChange(user: User, newRole: Role) {
-    setError(null)
-    try {
-      await api.patch(`/users/${user.id}`, { role: newRole })
-      await reload()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not change the role.')
-    }
-  }
-
   async function handleProjectChange(user: User, newProjectId: string) {
     setError(null)
     try {
@@ -257,19 +247,8 @@ export function UserManagementPage() {
               <tr key={user.id}>
                 <td className="px-4 py-2 font-medium text-slate-900">{user.name}</td>
                 <td className="px-4 py-2 text-slate-600">{user.email}</td>
-                <td className="px-4 py-2">
-                  <select
-                    value={user.role}
-                    onChange={(e) => handleRoleChange(user, e.target.value as Role)}
-                    disabled={currentUser?.role === 'hr_manager' && user.role === 'company_owner'}
-                    className="rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
-                  >
-                    {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
-                      <option key={r} value={r}>
-                        {ROLE_LABELS[r]}
-                      </option>
-                    ))}
-                  </select>
+                <td className="px-4 py-2 text-sm text-slate-700">
+                  {ROLE_LABELS[user.role as Role] ?? user.role}
                 </td>
                 <td className="px-4 py-2">
                   {user.role === 'customer' ? (

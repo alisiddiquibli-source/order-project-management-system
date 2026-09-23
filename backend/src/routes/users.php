@@ -139,8 +139,8 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
         }
     }
 
-    if (isset($body['role']) && !in_array($body['role'], UserRepository::VALID_ROLES, true)) {
-        Response::error('Invalid role.', 422);
+    if (isset($body['role'])) {
+        Response::error('Role cannot be changed after account creation.', 422);
     }
     if (isset($body['email']) && !filter_var($body['email'], FILTER_VALIDATE_EMAIL)) {
         Response::error('Invalid email address.', 422);
@@ -149,7 +149,7 @@ $router->patch('/api/users/{id}', function (Request $request, array $params): vo
         Response::error('A user with this email already exists.', 422);
     }
 
-    $finalRole = $body['role'] ?? $existing['role'];
+    $finalRole = $existing['role'];
     $finalEmail = $body['email'] ?? $existing['email'];
     if ($domainError = UserRepository::validateEmailDomain($finalRole, $finalEmail)) {
         Response::error($domainError, 422);
