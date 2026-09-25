@@ -15,6 +15,7 @@ import type { Order, Supplier, User } from '../lib/types'
 export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: () => Promise<void> }) {
   const { user } = useAuth()
   const canEditFull = user && ['project_coordinator', 'company_owner'].includes(user.role)
+  const canEditMachineName = user && ['project_coordinator', 'company_owner', 'sales_manager'].includes(user.role)
   const canReassign = user && ['project_coordinator', 'company_owner', 'sales_manager'].includes(user.role)
 
   const [machineName, setMachineName] = useState(order.machine_name)
@@ -53,8 +54,10 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
         project_coordinator_id: Number(coordinatorId),
         start_date: startDate,
       }
-      if (canEditFull) {
+      if (canEditMachineName) {
         body.machine_name = machineName
+      }
+      if (canEditFull) {
         body.machine_spec = machineSpec || null
         body.supplier_id = Number(supplierId)
       }
@@ -77,15 +80,17 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
       {saved && <p className="mb-2 text-sm text-emerald-600">Saved.</p>}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {canEditMachineName && (
+          <input
+            type="text"
+            placeholder="Machine name"
+            value={machineName}
+            onChange={(e) => setMachineName(e.target.value)}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        )}
         {canEditFull && (
           <>
-            <input
-              type="text"
-              placeholder="Machine name"
-              value={machineName}
-              onChange={(e) => setMachineName(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
             <input
               type="text"
               placeholder="Machine spec"
@@ -129,7 +134,7 @@ export function OrderEditForm({ order, onUpdated }: { order: Order; onUpdated: (
       <button
         type="button"
         onClick={handleSave}
-        disabled={submitting || (canEditFull && (!machineName || !supplierId)) || !engineerId || !coordinatorId || !startDate}
+        disabled={submitting || (canEditMachineName && !machineName) || (canEditFull && !supplierId) || !engineerId || !coordinatorId || !startDate}
         className="mt-3 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
       >
         Save changes

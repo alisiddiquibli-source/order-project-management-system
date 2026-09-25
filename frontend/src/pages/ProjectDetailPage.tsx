@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/AppShell'
 import { CustomerLoginPanel } from '../components/CustomerLoginPanel'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, getAccessToken } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Order, Project, Supplier, User } from '../lib/types'
 
@@ -25,11 +25,14 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
 
   const canCreateOrder = user && ['project_coordinator', 'sales_manager', 'company_owner'].includes(user.role)
+  const canEditTitle = user && ['sales_manager', 'project_coordinator', 'company_owner', 'hr_manager'].includes(user.role)
+  const canUploadPicture = user && ['company_owner', 'sales_manager', 'project_coordinator'].includes(user.role)
   // The Owner may leave dates for the Sales Manager/PC to fill in
   // afterward — a PC creating the order still has to know them.
   const datesOptional = user?.role === 'company_owner'
 
   const [orderNumber, setOrderNumber] = useState('')
+  const [orderNumberLoading, setOrderNumberLoading] = useState(false)
   const [machineName, setMachineName] = useState('')
   const [machineSpec, setMachineSpec] = useState('')
   const [supplierId, setSupplierId] = useState('')
@@ -41,7 +44,16 @@ export function ProjectDetailPage() {
 
   async function reload() {
     const requests: Promise<unknown>[] = [
-      api.get<Project>(`/projects/${id}`).then(setProject),
+      api.get<Project>(`/projects/${id}`).then((p) => {
+        setProject(p)
+        if (canCreateOrder && p.sales_manager_id) {
+          setOrderNumberLoading(true)
+          api.get<{ order_number: string }>(`/orders/next-number?sales_manager_id=${p.sales_manager_id}`)
+            .then((r) => setOrderNumber(r.order_number))
+            .catch(() => {})
+            .finally(() => setOrderNumberLoading(false))
+        }
+      }),
       api.get<Order[]>(`/orders?project_id=${id}`).then(setOrders),
     ]
     if (canCreateOrder) {
@@ -105,9 +117,17 @@ export function ProjectDetailPage() {
       {error && <p className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       {project && (
-        <p className="mb-4 text-sm text-slate-500">
-          {project.customer_name} — <Link to={`/projects/${project.id}/media`} className="text-brand-600 hover:underline">Project media</Link>
-        </p>
+        <div className="mb-4 flex items-start gap-4">
+          <div className="flex-1">
+            <p className="text-sm text-slate-500">
+              {project.customer_name} — <Link to={`/projects/${project.id}/media`} className="text-brand-600 hover:underline">Project media</Link>
+            </p>
+            {canEditTitle && (
+              <ProjectEditPanel project={project} onUpdated={reload} />
+            )}
+          </div>
+          <ProjectPicture project={project} canUpload={!!canUploadPicture} onUpdated={reload} />
+        </div>
       )}
 
       {project && <CustomerLoginPanel projectId={project.id} />}
@@ -118,10 +138,10 @@ export function ProjectDetailPage() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             <input
               type="text"
-              placeholder="Order number (e.g. ORD-0007)"
+              placeholder={orderNumberLoading ? 'Generating…' : 'Auto-generated'}
               value={orderNumber}
-              onChange={(e) => setOrderNumber(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              readOnly
+              className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
             />
             <input
               type="text"
@@ -210,6 +230,7 @@ export function ProjectDetailPage() {
             onClick={handleCreateOrder}
             disabled={
               submitting ||
+              orderNumberLoading ||
               !orderNumber ||
               !machineName ||
               !supplierId ||
@@ -244,5 +265,111 @@ export function ProjectDetailPage() {
         {orders?.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No orders (machines) yet.</p>}
       </div>
     </AppShell>
+  )
+}
+
+function ProjectEditPanel({ project, onUpdated }: { project: Project; onUpdated: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(project.title)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!editing) {
+    return (
+      <button type="button" onClick={() => setEditing(true)} className="mt-1 text-xs text-brand-600 hover:underline">
+        Edit title
+      </button>
+    )
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setError(null)
+    try {
+      await api.patch(`/projects/${project.id}`, { title })
+      setEditing(false)
+      await onUpdated()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+      />
+      <button type="button" onClick={handleSave} disabled={saving || !title} className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60">
+        Save
+      </button>
+      <button type="button" onClick={() => { setEditing(false); setTitle(project.title) }} className="text-xs text-slate-500 hover:underline">
+        Cancel
+      </button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </div>
+  )
+}
+
+function ProjectPicture({ project, canUpload, onUpdated }: { project: Project; canUpload: boolean; onUpdated: () => Promise<void> }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!project.picture) { setPreviewUrl(null); return }
+    const token = getAccessToken()
+    fetch(`/api/documents/file/${project.picture}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.ok ? r.blob() : null)
+      .then((blob) => blob ? setPreviewUrl(URL.createObjectURL(blob)) : null)
+      .catch(() => setPreviewUrl(null))
+  }, [project.picture])
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      await api.post(`/projects/${project.id}/picture`, form)
+      await onUpdated()
+    } catch { /* silently fail */ }
+    finally { setUploading(false) }
+  }
+
+  return (
+    <div className="shrink-0">
+      <div className="relative h-20 w-20 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+        {previewUrl ? (
+          <img src={previewUrl} alt="Project" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-slate-300">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+          </div>
+        )}
+        {canUpload && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity hover:bg-black/40 hover:opacity-100"
+          >
+            <span className="text-xs font-medium text-white">{uploading ? '...' : 'Upload'}</span>
+          </button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={handleUpload} className="hidden" />
+    </div>
   )
 }

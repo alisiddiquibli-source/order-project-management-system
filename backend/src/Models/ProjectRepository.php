@@ -62,6 +62,72 @@ final class ProjectRepository
         return $project;
     }
 
+    public static function generateProjectNumber(int $salesManagerId): string
+    {
+        $db = Database::connection();
+        $initials = self::salesManagerInitials($db, $salesManagerId);
+        $prefix = "PRJ-{$initials}-";
+
+        $stmt = $db->prepare(
+            "SELECT project_number FROM projects
+             WHERE sales_manager_id = :sm_id AND project_number LIKE :prefix
+             ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute(['sm_id' => $salesManagerId, 'prefix' => $prefix . '%']);
+        $last = $stmt->fetchColumn();
+
+        $seq = 1;
+        if ($last !== false) {
+            $tail = substr($last, strlen($prefix));
+            $seq = ((int) $tail) + 1;
+        }
+
+        return $prefix . str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    public static function generateOrderNumber(int $salesManagerId): string
+    {
+        $db = Database::connection();
+        $initials = self::salesManagerInitials($db, $salesManagerId);
+        $prefix = "ORD-{$initials}-";
+
+        $stmt = $db->prepare(
+            "SELECT order_number FROM orders o
+             JOIN projects p ON p.id = o.project_id
+             WHERE p.sales_manager_id = :sm_id AND o.order_number LIKE :prefix
+             ORDER BY o.id DESC LIMIT 1"
+        );
+        $stmt->execute(['sm_id' => $salesManagerId, 'prefix' => $prefix . '%']);
+        $last = $stmt->fetchColumn();
+
+        $seq = 1;
+        if ($last !== false) {
+            $tail = substr($last, strlen($prefix));
+            $seq = ((int) $tail) + 1;
+        }
+
+        return $prefix . str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    private static function salesManagerInitials(\PDO $db, int $salesManagerId): string
+    {
+        $stmt = $db->prepare('SELECT name FROM users WHERE id = :id');
+        $stmt->execute(['id' => $salesManagerId]);
+        $name = $stmt->fetchColumn();
+
+        if ($name === false) {
+            return 'XX';
+        }
+
+        $parts = preg_split('/\s+/', trim((string) $name));
+        $initials = '';
+        foreach ($parts as $part) {
+            $initials .= strtoupper(mb_substr($part, 0, 1));
+        }
+
+        return $initials ?: 'XX';
+    }
+
     /**
      * @param array<string, mixed> $data
      * @return array<string, mixed> the created project
@@ -86,6 +152,31 @@ final class ProjectRepository
         ]);
 
         return self::findById((int) $db->lastInsertId());
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    public static function update(int $id, array $data): array
+    {
+        $fields = ['title', 'customer_name'];
+        $sets = [];
+        $params = ['id' => $id];
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $data)) {
+                $sets[] = "{$field} = :{$field}";
+                $params[$field] = $data[$field];
+            }
+        }
+
+        if ($sets !== []) {
+            Database::connection()
+                ->prepare('UPDATE projects SET ' . implode(', ', $sets) . ' WHERE id = :id')
+                ->execute($params);
+        }
+
+        return self::findById($id);
     }
 
     /**
@@ -156,6 +247,13 @@ final class ProjectRepository
         }
 
         return null;
+    }
+
+    public static function setPicture(int $id, string $filename): void
+    {
+        Database::connection()
+            ->prepare('UPDATE projects SET picture = :picture WHERE id = :id')
+            ->execute(['picture' => $filename, 'id' => $id]);
     }
 
     public static function delete(int $id): void

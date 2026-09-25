@@ -71,6 +71,7 @@ export interface Project {
   sales_manager_id: number
   project_coordinator_id: number
   status: 'active' | 'completed'
+  picture: string | null
 }
 
 export interface Supplier {

@@ -25,6 +25,7 @@ export function ProjectsPage() {
   const [salesManagerId, setSalesManagerId] = useState('')
   const [projectCoordinatorId, setProjectCoordinatorId] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [loadingNumber, setLoadingNumber] = useState(false)
 
   const canCreate = user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role)
   const canDelete = user?.role === 'company_owner'
@@ -44,6 +45,16 @@ export function ProjectsPage() {
     reload().catch(() => setError('Could not load projects.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function fetchNextProjectNumber(smId: string) {
+    if (!smId) { setProjectNumber(''); return }
+    setLoadingNumber(true)
+    try {
+      const res = await api.get<{ project_number: string }>(`/projects/next-number?sales_manager_id=${smId}`)
+      setProjectNumber(res.project_number)
+    } catch { setProjectNumber('') }
+    finally { setLoadingNumber(false) }
+  }
 
   async function handleCreate() {
     setSubmitting(true)
@@ -92,10 +103,10 @@ export function ProjectsPage() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <input
               type="text"
-              placeholder="Project number (e.g. PRJ-0007)"
+              placeholder={loadingNumber ? 'Generating…' : 'Select a Sales Manager first'}
               value={projectNumber}
-              onChange={(e) => setProjectNumber(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+              readOnly
+              className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600"
             />
             <input
               type="text"
@@ -113,7 +124,7 @@ export function ProjectsPage() {
             />
             <select
               value={salesManagerId}
-              onChange={(e) => setSalesManagerId(e.target.value)}
+              onChange={(e) => { setSalesManagerId(e.target.value); fetchNextProjectNumber(e.target.value) }}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             >
               <option value="">Sales Manager…</option>
@@ -139,7 +150,7 @@ export function ProjectsPage() {
           <button
             type="button"
             onClick={handleCreate}
-            disabled={submitting || !projectNumber || !customerName || !title || !salesManagerId || !projectCoordinatorId}
+            disabled={submitting || loadingNumber || !projectNumber || !customerName || !title || !salesManagerId || !projectCoordinatorId}
             className="mt-3 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
           >
             Create project

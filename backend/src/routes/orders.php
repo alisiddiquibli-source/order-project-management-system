@@ -36,7 +36,7 @@ $router->post('/api/orders', function (Request $request): void {
     Authenticator::requireRole($request, ['project_coordinator', 'sales_manager', 'company_owner', 'hr_manager']);
 
     $body = $request->body;
-    $required = ['project_id', 'order_number', 'machine_name', 'supplier_id', 'installation_engineer_id'];
+    $required = ['project_id', 'machine_name', 'supplier_id', 'installation_engineer_id'];
     // Owner and HR Manager may leave dates for the Sales Manager/PC to fill
     // in afterward; a PC creating the order still has to know them.
     if (!in_array($claims['role'], ['company_owner', 'hr_manager'], true)) {
@@ -66,6 +66,10 @@ $router->post('/api/orders', function (Request $request): void {
     $project = ProjectRepository::findByIdForUser((int) $body['project_id'], $claims);
     if ($project === null) {
         Response::error('Project not found.', 404);
+    }
+
+    if (empty($body['order_number'])) {
+        $body['order_number'] = ProjectRepository::generateOrderNumber((int) $project['sales_manager_id']);
     }
 
     if (!OrderRepository::supplierExists((int) $body['supplier_id'])) {
@@ -101,10 +105,10 @@ $router->patch('/api/orders/{id}', function (Request $request, array $params): v
     $body = $request->body;
 
     if ($claims['role'] === 'sales_manager') {
-        $allowedFields = ['project_coordinator_id', 'installation_engineer_id', 'start_date'];
+        $allowedFields = ['project_coordinator_id', 'installation_engineer_id', 'start_date', 'machine_name'];
         $disallowed = array_diff(array_keys($body), $allowedFields);
         if ($disallowed !== []) {
-            Response::error('A Sales Manager can only reassign the PC/Engineer or change the start date.', 403);
+            Response::error('A Sales Manager can only edit the machine name, reassign the PC/Engineer, or change the start date.', 403);
         }
     }
 
@@ -134,6 +138,10 @@ $router->patch('/api/orders/{id}/status', function (Request $request, array $par
     $reason = (string) ($request->body['reason'] ?? '');
     if (!in_array($newStatus, ['active', 'on_hold', 'cancelled', 'completed'], true) || $reason === '') {
         Response::error('status (active|on_hold|cancelled|completed) and reason are required.', 422);
+    }
+
+    if ($newStatus === 'completed' && $claims['role'] !== 'company_owner') {
+        Response::error('Only the Company Owner can close out (mark completed) an order.', 403);
     }
 
     OrderRepository::changeStatus($orderId, $newStatus, $reason, (int) $claims['sub']);
