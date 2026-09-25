@@ -1,17 +1,13 @@
 import { useEffect, useState } from 'react'
 import { AiReportsPanel } from '../components/AiReportsPanel'
 import { AppShell } from '../components/AppShell'
-import { OrderPortfolioTable, SummaryCard, loadPortfolio, type OrderWithStages } from '../components/OrderPortfolioTable'
+import { SummaryCard } from '../components/OrderPortfolioTable'
+import { ProjectPortfolioView, loadPortfolioGrouped, type OrderWithStages } from '../components/ProjectPortfolioView'
 import { api } from '../lib/api'
-import type { AiReport } from '../lib/types'
+import type { AiReport, Project } from '../lib/types'
 
-/**
- * Company Owner's home view: portfolio-wide, every order, at-a-glance
- * status — leads with what this role needs first (§11.1). Dedicated
- * summary/aggregation endpoints are a known follow-up (docs/ROADMAP.md);
- * this fetches per-order stage lists client-side in the meantime.
- */
 export function OwnerDashboardPage() {
+  const [projects, setProjects] = useState<Project[] | null>(null)
   const [orders, setOrders] = useState<OrderWithStages[] | null>(null)
   const [aiReports, setAiReports] = useState<AiReport[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -24,17 +20,18 @@ export function OwnerDashboardPage() {
   useEffect(() => {
     let cancelled = false
 
-    Promise.all([loadPortfolio(api), reloadAiReports()])
-      .then(([portfolioData]) => {
-        if (!cancelled) setOrders(portfolioData)
+    Promise.all([loadPortfolioGrouped(api), reloadAiReports()])
+      .then(([{ projects: p, orders: o }]) => {
+        if (!cancelled) {
+          setProjects(p)
+          setOrders(o)
+        }
       })
       .catch(() => {
         if (!cancelled) setError('Could not load the portfolio. Please try again shortly.')
       })
 
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -42,7 +39,8 @@ export function OwnerDashboardPage() {
 
   return (
     <AppShell title="Portfolio">
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <SummaryCard label="Projects" value={projects?.length ?? '—'} />
         <SummaryCard label="Active orders" value={orders?.filter((o) => o.status === 'active').length ?? '—'} />
         <SummaryCard label="Needs attention" value={orders ? atRiskCount : '—'} tone={atRiskCount > 0 ? 'warning' : 'default'} />
         <SummaryCard label="Total orders" value={orders?.length ?? '—'} />
@@ -50,7 +48,7 @@ export function OwnerDashboardPage() {
 
       {error && <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-      {orders && <OrderPortfolioTable orders={orders} />}
+      {projects && orders && <ProjectPortfolioView projects={projects} orders={orders} />}
 
       <div className="mt-4">
         <AiReportsPanel

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AiReportsPanel } from '../components/AiReportsPanel'
 import { AmcSection } from '../components/AmcSection'
@@ -10,7 +10,7 @@ import { ProgressRing } from '../components/ProgressRing'
 import { ServiceTicketsPanel } from '../components/ServiceTicketsPanel'
 import { StageEvidence } from '../components/StageEvidence'
 import { StatusBadge } from '../components/StatusBadge'
-import { ApiError, api } from '../lib/api'
+import { ApiError, api, getAccessToken } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { AiReport, Order, OrderStage, User } from '../lib/types'
 
@@ -33,6 +33,14 @@ export function OrderDetailPage() {
   const [expandedStageId, setExpandedStageId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
+  const [showCloseout, setShowCloseout] = useState(false)
+  const [closeoutReason, setCloseoutReason] = useState('')
+  const [closeoutSubmitting, setCloseoutSubmitting] = useState(false)
+  const [closeoutError, setCloseoutError] = useState<string | null>(null)
+
+  const isOwner = user?.role === 'company_owner'
+  const isActive = order?.status === 'active'
+
   async function reload() {
     const [orderData, stagesData, aiReportsData] = await Promise.all([
       api.get<Order>(`/orders/${id}`),
@@ -49,10 +57,11 @@ export function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const canEditStages = user?.role === 'project_coordinator'
-  const canEditDates = user && ['project_coordinator', 'sales_manager'].includes(user.role)
+  const canEditStages = user?.role === 'project_coordinator' && isActive
+  const canEditDates = user && ['project_coordinator', 'sales_manager'].includes(user.role) && isActive
   const canGenerateRiskAdvisory = user && ['sales_manager', 'project_coordinator', 'company_owner'].includes(user.role)
   const isInternal = user && !['customer', 'supplier'].includes(user.role)
+  const canUploadPicture = user && ['company_owner', 'sales_manager', 'project_coordinator'].includes(user.role)
 
   const completedCount = stages?.filter((s) => s.status === 'completed').length ?? 0
   const totalStages = stages?.length ?? 12
@@ -73,12 +82,55 @@ export function OrderDetailPage() {
     { key: 'service', label: 'Service' },
   ]
 
+  async function handleCloseout() {
+    if (!closeoutReason.trim()) return
+    setCloseoutSubmitting(true)
+    setCloseoutError(null)
+    try {
+      await api.patch(`/orders/${id}/status`, { status: 'completed', reason: closeoutReason.trim() })
+      setShowCloseout(false)
+      setCloseoutReason('')
+      await reload()
+    } catch (err) {
+      setCloseoutError(err instanceof ApiError ? err.message : 'Something went wrong.')
+    } finally {
+      setCloseoutSubmitting(false)
+    }
+  }
+
+  async function handleReopen() {
+    const reason = prompt('Reason for reopening this order:')
+    if (!reason?.trim()) return
+    try {
+      await api.patch(`/orders/${id}/status`, { status: 'active', reason: reason.trim() })
+      await reload()
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Something went wrong.')
+    }
+  }
+
   return (
     <AppShell
       title={order ? `${order.order_number} · ${order.machine_name}` : 'Order'}
       breadcrumbs={order ? [{ label: 'Projects', to: '/' }, { label: `Order ${order.order_number}` }] : undefined}
     >
       {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+      {/* Completed order banner */}
+      {order && order.status === 'completed' && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl bg-blue-50 px-4 py-3 ring-1 ring-blue-200">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" className="h-5 w-5 shrink-0">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          <span className="text-sm font-medium text-blue-800">This order has been closed out.</span>
+          {isOwner && (
+            <button type="button" onClick={handleReopen} className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
+              Reopen order
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Hero Card */}
       {order && (
@@ -123,33 +175,70 @@ export function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Alert banner */}
-              {allComplete && (
+              {/* Alert banner — closeout needed */}
+              {allComplete && isActive && isOwner && !showCloseout && (
                 <div className="mt-4 flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white text-xs">!</span>
                   <span className="text-sm font-medium text-amber-800">All stages complete — closeout review needed</span>
-                  <button type="button" className="ml-auto rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowCloseout(true)}
+                    className="ml-auto rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700"
+                  >
                     Review closeout
                   </button>
                 </div>
               )}
+              {allComplete && isActive && !isOwner && (
+                <div className="mt-4 flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white text-xs">!</span>
+                  <span className="text-sm font-medium text-amber-800">All stages complete — waiting for Owner to review closeout</span>
+                </div>
+              )}
+
+              {/* Closeout dialog */}
+              {showCloseout && (
+                <div className="mt-4 rounded-xl bg-white p-4 ring-1 ring-slate-200 shadow-md">
+                  <h4 className="mb-2 text-sm font-semibold text-slate-900">Closeout review</h4>
+                  <p className="mb-3 text-xs text-slate-500">
+                    Closing this order marks it as completed. All {totalStages} stages are done.
+                    Please provide a reason or summary for the closeout.
+                  </p>
+                  <textarea
+                    value={closeoutReason}
+                    onChange={(e) => setCloseoutReason(e.target.value)}
+                    placeholder="Closeout reason / summary..."
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                  {closeoutError && <p className="mt-1 text-sm text-red-600">{closeoutError}</p>}
+                  <div className="mt-3 flex items-center gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setShowCloseout(false); setCloseoutReason(''); setCloseoutError(null) }}
+                      className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseout}
+                      disabled={closeoutSubmitting || !closeoutReason.trim()}
+                      className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+                    >
+                      {closeoutSubmitting ? 'Closing...' : 'Confirm closeout'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Machine image placeholder */}
-            <div className="flex h-40 w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 ring-1 ring-slate-200 lg:h-48 lg:w-64">
-              <div className="text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto h-12 w-12 text-slate-300">
-                  <rect x="2" y="6" width="20" height="12" rx="2" />
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M2 12h4M18 12h4" />
-                </svg>
-                <p className="mt-2 text-xs text-slate-400">{order.machine_spec ?? order.machine_name}</p>
-              </div>
-            </div>
+            {/* Machine picture */}
+            <OrderPicture order={order} canUpload={!!canUploadPicture && isActive} onUploaded={reload} />
           </div>
 
-          {/* Edit order button */}
-          {isInternal && (
+          {/* Edit order button — only if active */}
+          {isInternal && isActive && (
             <div className="border-t border-slate-100 px-6 py-2">
               <OrderEditForm order={order} onUpdated={reload} />
             </div>
@@ -374,6 +463,82 @@ export function OrderDetailPage() {
         </div>
       )}
     </AppShell>
+  )
+}
+
+function OrderPicture({ order, canUpload, onUploaded }: { order: Order; canUpload: boolean; onUploaded: () => Promise<void> }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!order.picture) return
+    const token = getAccessToken()
+    fetch(`/api/documents/file/${order.picture}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (blob) setPreviewUrl(URL.createObjectURL(blob))
+      })
+      .catch(() => {})
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.picture])
+
+  async function handleFile(file: File) {
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('picture', file)
+      await api.post(`/orders/${order.id}/picture`, form)
+      await onUploaded()
+    } catch {
+      alert('Upload failed.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (previewUrl) {
+    return (
+      <div className="relative flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-xl ring-1 ring-slate-200 lg:h-48 lg:w-64">
+        <img src={previewUrl} alt={order.machine_name} className="h-full w-full object-cover" />
+        {canUpload && (
+          <>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="absolute bottom-2 right-2 rounded-lg bg-white/90 px-2 py-1 text-xs font-medium text-slate-700 shadow hover:bg-white"
+            >
+              Change
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`flex h-40 w-full shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 ring-1 ring-slate-200 lg:h-48 lg:w-64 ${canUpload ? 'cursor-pointer hover:ring-brand-300' : ''}`}
+      onClick={() => canUpload && fileRef.current?.click()}
+    >
+      <div className="text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mx-auto h-12 w-12 text-slate-300">
+          <rect x="2" y="6" width="20" height="12" rx="2" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M2 12h4M18 12h4" />
+        </svg>
+        <p className="mt-2 text-xs text-slate-400">
+          {uploading ? 'Uploading...' : canUpload ? 'Click to upload picture' : (order.machine_spec ?? order.machine_name)}
+        </p>
+      </div>
+      {canUpload && <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />}
+    </div>
   )
 }
 

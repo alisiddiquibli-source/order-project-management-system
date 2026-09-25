@@ -60,6 +60,7 @@ export interface Order {
   project_coordinator_name: string | null
   installation_engineer_name: string | null
   supplier_name: string | null
+  picture: string | null
 }
 
 export interface Project {
