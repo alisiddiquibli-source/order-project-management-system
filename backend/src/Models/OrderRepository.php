@@ -339,4 +339,11 @@ final class OrderRepository
             ->prepare('UPDATE orders SET warranty_start_date = CURDATE() WHERE id = :id')
             ->execute(['id' => $orderId]);
     }
+
+    public static function setPicture(int $orderId, string $filename): void
+    {
+        Database::connection()
+            ->prepare('UPDATE orders SET picture = :picture WHERE id = :id')
+            ->execute(['picture' => $filename, 'id' => $orderId]);
+    }
 }

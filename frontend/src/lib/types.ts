@@ -44,6 +44,7 @@ export interface Order {
   order_number: string
   machine_name: string
   machine_spec: string | null
+  picture: string | null
   supplier_id: number
   status: OrderStatus
   start_date: string
@@ -70,6 +71,7 @@ export interface Project {
   title: string
   sales_manager_id: number
   project_coordinator_id: number
+  picture: string | null
   status: 'active' | 'completed'
 }
 

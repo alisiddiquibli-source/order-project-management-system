@@ -7,6 +7,7 @@ use Bli\Domain\StageCompletionEvaluator;
 use Bli\Http\OrderAccess;
 use Bli\Http\Request;
 use Bli\Http\Response;
+use Bli\Models\DocumentRepository;
 use Bli\Models\OrderRepository;
 use Bli\Models\OrderStageRepository;
 use Bli\Models\ProjectRepository;
@@ -134,6 +135,28 @@ $router->patch('/api/orders/{id}/status', function (Request $request, array $par
     $reason = (string) ($request->body['reason'] ?? '');
     if (!in_array($newStatus, ['active', 'on_hold', 'cancelled', 'completed'], true) || $reason === '') {
         Response::error('status (active|on_hold|cancelled|completed) and reason are required.', 422);
+    }
+
+    $currentOrder = OrderRepository::findByIdUnscoped($orderId);
+    if ($currentOrder === null) {
+        Response::error('Order not found.', 404);
+    }
+
+    if ($currentOrder['status'] === 'completed' && $claims['role'] !== 'company_owner') {
+        Response::error('Only the Company Owner can reopen a completed order.', 403);
+    }
+
+    if ($newStatus === 'completed' && $claims['role'] !== 'company_owner') {
+        Response::error('Only the Company Owner can close out (mark completed) an order.', 403);
+    }
+
+    if ($newStatus === 'completed') {
+        $stages = OrderStageRepository::listForOrder($orderId);
+        foreach ($stages as $stage) {
+            if ($stage['status'] !== 'completed') {
+                Response::error('Cannot close out an order until all 12 stages are completed.', 422);
+            }
+        }
     }
 
     OrderRepository::changeStatus($orderId, $newStatus, $reason, (int) $claims['sub']);
@@ -319,4 +342,33 @@ $router->post('/api/orders/{id}/stages/{stageId}/exceptions', function (Request 
     );
 
     Response::json($exception, 201);
+});
+
+$router->post('/api/orders/{id}/picture', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
+
+    $orderId = (int) $params['id'];
+    OrderAccess::requireVisibleOrder($orderId, $claims);
+
+    $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+        Response::error('The file is too large.', 413);
+    }
+    if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
+        Response::error('An image file upload is required.', 422);
+    }
+
+    $ext = strtolower(pathinfo($request->files['file']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+        Response::error('Only JPG/PNG images are accepted.', 422);
+    }
+
+    $filename = DocumentRepository::storeUploadedFile(
+        $request->files['file']['tmp_name'],
+        $request->files['file']['name']
+    );
+
+    OrderRepository::setPicture($orderId, $filename);
+    Response::json(OrderRepository::findByIdUnscoped($orderId));
 });

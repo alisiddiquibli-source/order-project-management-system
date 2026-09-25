@@ -50,6 +50,102 @@ $router->post('/api/projects', function (Request $request): void {
     Response::json($project, 201);
 });
 
+$router->patch('/api/projects/{id}', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['sales_manager', 'project_coordinator', 'company_owner', 'hr_manager']);
+
+    $id = (int) $params['id'];
+    $project = ProjectRepository::findByIdForUser($id, $claims);
+    if ($project === null) {
+        Response::error('Project not found.', 404);
+    }
+
+    $body = $request->body;
+    if (empty($body['title']) && empty($body['customer_name'])) {
+        Response::error('Nothing to update — provide title or customer_name.', 422);
+    }
+
+    Response::json(ProjectRepository::update($id, $body));
+});
+
+$router->patch('/api/projects/{id}/status', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner']);
+
+    $id = (int) $params['id'];
+    $project = ProjectRepository::findByIdForUser($id, $claims);
+    if ($project === null) {
+        Response::error('Project not found.', 404);
+    }
+
+    $newStatus = (string) ($request->body['status'] ?? '');
+    if (!in_array($newStatus, ['active', 'completed'], true)) {
+        Response::error('status must be active or completed.', 422);
+    }
+
+    if ($newStatus === 'completed') {
+        $orders = ProjectRepository::ordersForProject($id);
+        if (empty($orders)) {
+            Response::error('Cannot close a project with no orders.', 422);
+        }
+        foreach ($orders as $order) {
+            if ($order['status'] !== 'completed') {
+                Response::error('Cannot close a project until all its orders are completed. Order ' . $order['order_number'] . ' is still ' . $order['status'] . '.', 422);
+            }
+        }
+    }
+
+    ProjectRepository::changeStatus($id, $newStatus);
+    Response::json(ProjectRepository::findByIdForUser($id, $claims));
+});
+
+$router->get('/api/documents/file/{filename}', function (Request $request, array $params): void {
+    Authenticator::requireAuth($request);
+
+    $filename = basename($params['filename']);
+    $absolutePath = DocumentRepository::storageDir() . '/' . $filename;
+    if (!is_file($absolutePath)) {
+        Response::error('File not found.', 404);
+    }
+
+    header('Content-Type: ' . DocumentRepository::mimeType($filename));
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+    readfile($absolutePath);
+    exit;
+});
+
+$router->post('/api/projects/{id}/picture', function (Request $request, array $params): void {
+    $claims = Authenticator::requireAuth($request);
+    Authenticator::requireRole($request, ['company_owner', 'sales_manager', 'project_coordinator']);
+
+    $id = (int) $params['id'];
+    $project = ProjectRepository::findByIdForUser($id, $claims);
+    if ($project === null) {
+        Response::error('Project not found.', 404);
+    }
+
+    $uploadError = $request->files['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError === UPLOAD_ERR_INI_SIZE || $uploadError === UPLOAD_ERR_FORM_SIZE) {
+        Response::error('The file is too large.', 413);
+    }
+    if (!isset($request->files['file']) || $uploadError !== UPLOAD_ERR_OK) {
+        Response::error('An image file upload is required.', 422);
+    }
+
+    $ext = strtolower(pathinfo($request->files['file']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+        Response::error('Only JPG/PNG images are accepted.', 422);
+    }
+
+    $filename = DocumentRepository::storeUploadedFile(
+        $request->files['file']['tmp_name'],
+        $request->files['file']['name']
+    );
+
+    ProjectRepository::setPicture($id, $filename);
+    Response::json(ProjectRepository::findByIdForUser($id, $claims));
+});
+
 $router->delete('/api/projects/{id}', function (Request $request, array $params): void {
     Authenticator::requireAuth($request);
     // Owner-only, and deliberately not delegated further — deleting a
